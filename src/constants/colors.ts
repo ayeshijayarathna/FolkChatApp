@@ -1,0 +1,16 @@
+export const COLORS = {
+  saffron:  '#D4651A',
+  clay:     '#C4834A',
+  rust:     '#8B3A1A',
+  ivory:    '#F5EFE6',
+  forest:   '#2D5016',
+  teal:     '#1A6B5C',
+  gold:     '#B8860B',
+  earth:    '#5C3D2E',
+  offwhite: '#FAFAF8',
+  warmBg:   '#F0EBE3',
+  darkText: '#2C2418',
+  muted:    '#7A6A5A',
+  white:    '#FFFFFF',
+  border:   '#E8DDD4',
+};

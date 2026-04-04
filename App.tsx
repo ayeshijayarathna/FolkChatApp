@@ -1,45 +1,38 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import React, { useEffect, useState } from 'react';
+import { StatusBar, View, ActivityIndicator } from 'react-native';
+import auth from '@react-native-firebase/auth';
+import AppNavigator from './src/navigation/AppNavigator';
+import { useAuthStore } from './src/store/authStore';
+import { COLORS } from './src/constants/colors';
 
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+export default function App() {
+  const { setUser, fetchUserProfile, setLoading } = useAuthStore();
+  const [initializing, setInitializing] = useState(true);
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
+  useEffect(() => {
+    const unsubscribe = auth().onAuthStateChanged(async (user) => {
+      setUser(user);
+      if (user) {
+        await fetchUserProfile(user.uid);
+      }
+      setLoading(false);
+      setInitializing(false);
+    });
+    return unsubscribe;
+  }, []);
+
+  if (initializing) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.warmBg }}>
+        <ActivityIndicator size="large" color={COLORS.saffron} />
+      </View>
+    );
+  }
 
   return (
-    <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
-    </SafeAreaProvider>
+    <>
+      <StatusBar barStyle="dark-content" backgroundColor="#F0EBE3" />
+      <AppNavigator />
+    </>
   );
 }
-
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
-
-  return (
-    <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});
-
-export default App;
