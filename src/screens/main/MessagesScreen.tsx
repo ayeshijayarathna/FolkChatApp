@@ -1,25 +1,20 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { COLORS } from '../../constants/colors';
+import { useTheme } from '../../context/ThemeContext';
+import { useLang } from '../../context/LanguageContext';
 
 export default function MessagesScreen() {
+  const { colors } = useTheme();
+  const { t } = useLang();
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.text}>Messages</Text>
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      <Text style={[styles.text, { color: colors.darkText }]}>{t.messages}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.warmBg,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  text: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORS.darkText,
-  },
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  text: { fontSize: 24, fontWeight: 'bold' },
 });

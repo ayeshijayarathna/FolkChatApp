@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ImageBackground, Dimensions,
   ScrollView, ActivityIndicator,
+  Image, 
 } from 'react-native';
 import { COLORS } from '../../constants/colors';
 import { signUpWithEmail, createUserProfile } from '../../services/firebase';
@@ -16,8 +17,11 @@ export default function SignUpScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
   const [showPassword, setShowPassword] = useState(false);
+
   const [selectedCategory, setSelectedCategory] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -35,6 +39,7 @@ export default function SignUpScreen({ navigation }: any) {
     setError('');
     try {
       const result = await signUpWithEmail(email, password);
+
       await createUserProfile(result.user.uid, {
         name,
         email,
@@ -59,15 +64,21 @@ export default function SignUpScreen({ navigation }: any) {
       source={require('../../../assets/images/auth_bg.png')}
       style={styles.bg}
       resizeMode="cover">
+
       <View style={styles.overlay}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>Join FolkChat</Text>
-            <Text style={styles.headerSub}>Create your artist profile</Text>
+            <Image
+              source={require('../../../assets/images/logo.png')}
+              style={styles.headerImage}
+              resizeMode="contain"
+            />
+            <Text style={styles.headerTitle}>Register!!</Text>
           </View>
 
           <View style={styles.card}>
+
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <Text style={styles.label}>Full Name</Text>
@@ -156,6 +167,7 @@ export default function SignUpScreen({ navigation }: any) {
                 <Text style={styles.loginLinkBold}>Sign In</Text>
               </Text>
             </TouchableOpacity>
+
           </View>
         </ScrollView>
       </View>
@@ -165,39 +177,68 @@ export default function SignUpScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   bg: { flex: 1, width, height },
-  overlay: { flex: 1, backgroundColor: 'rgba(172, 144, 101, 0.45)' },
+  overlay: { flex: 1},
   scroll: { flexGrow: 1, padding: 24, paddingTop: 60 },
   header: { marginBottom: 24, alignItems: 'center' },
+  headerImage: {
+      width: 160,
+    height: 160,
+    borderRadius: 80,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: COLORS.saffron,
+  },
   headerTitle: { fontSize: 34, fontWeight: 'bold', color: COLORS.white },
-  headerSub: { fontSize: 15, color: 'rgba(255,255,255,0.75)', marginTop: 6 },
+
   card: {
-    backgroundColor: 'rgba(255,255,255,0.13)',
-    borderRadius: 24, padding: 28,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(187, 124, 42, 0.13)',
+    borderRadius: 24,
+    padding: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(70, 41, 3, 0.25)',
     marginBottom: 40,
   },
+
   error: { color: '#FF6B6B', marginBottom: 12, textAlign: 'center', fontSize: 13 },
-  label: { color: COLORS.white, fontSize: 14, marginBottom: 8, fontWeight: '500' },
+
+  label: { color: COLORS.darkText, fontSize: 14, marginBottom: 8, fontWeight: '500' },
+
   input: {
     backgroundColor: 'rgba(255,255,255,0.92)',
-    borderRadius: 12, padding: 14,
-    fontSize: 15, color: COLORS.darkText, marginBottom: 16,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: COLORS.darkText,
+    marginBottom: 16,
   },
+
   passwordRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   eyeBtn: { padding: 14, backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 12 },
+
   chip: {
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.15)', marginRight: 8,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor:COLORS.rust,
   },
+
   chipActive: { backgroundColor: COLORS.saffron, borderColor: COLORS.saffron },
-  chipText: { color: 'rgba(255,255,255,0.8)', fontSize: 12 },
-  chipTextActive: { color: COLORS.white, fontWeight: '600' },
+  chipText: { color:COLORS.rust, fontSize: 12 },
+  chipTextActive: { color: COLORS.warmBg, fontWeight: '600' },
+
   signupBtn: {
-    backgroundColor: COLORS.saffron, padding: 16, borderRadius: 12,
-    alignItems: 'center', marginTop: 8, marginBottom: 20,
+    backgroundColor: COLORS.saffron,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 20,
   },
   signupBtnText: { color: COLORS.white, fontSize: 16, fontWeight: 'bold' },
-  loginLink: { textAlign: 'center', color: 'rgba(255,255,255,0.75)', fontSize: 14 },
+
+  loginLink: { textAlign: 'center', color:COLORS.darkText, fontSize: 14 },
   loginLinkBold: { color: COLORS.saffron, fontWeight: 'bold' },
 });

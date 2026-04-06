@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ImageBackground, Dimensions,
   KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator,
+  Image,
 } from 'react-native';
 import { COLORS } from '../../constants/colors';
 import { signInWithEmail, signInWithGoogle } from '../../services/firebase';
@@ -16,6 +17,7 @@ export default function LoginScreen({ navigation }: any) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
   const [error, setError] = useState('');
 
   const handleLogin = async () => {
@@ -56,9 +58,10 @@ export default function LoginScreen({ navigation }: any) {
 
   return (
     <ImageBackground
-      source={require('../../../assets/images/auth_bg.png')}
+      source={require('../../../assets/images/su.png')}
       style={styles.bg}
       resizeMode="cover">
+
       <View style={styles.overlay}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -68,11 +71,15 @@ export default function LoginScreen({ navigation }: any) {
             keyboardShouldPersistTaps="handled">
 
             <View style={styles.header}>
-              <Text style={styles.headerTitle}>Welcome Back</Text>
-              <Text style={styles.headerSub}>Log in to FolkChat</Text>
+              <Image
+                source={require('../../../assets/images/logo.png')}
+                style={styles.headerImage}
+                resizeMode="contain"
+              />
+              <Text style={styles.headerTitle}>Login Here!!</Text>
             </View>
-
             <View style={styles.card}>
+
               <View style={styles.errorContainer}>
                 {error !== '' && <Text style={styles.error}>{error}</Text>}
               </View>
@@ -150,8 +157,8 @@ export default function LoginScreen({ navigation }: any) {
                   <Text style={styles.signupLinkBold}>Sign Up</Text>
                 </Text>
               </TouchableOpacity>
-            </View>
 
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
@@ -161,43 +168,69 @@ export default function LoginScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   bg: { flex: 1, width, height },
-  overlay: { flex: 1, backgroundColor: 'rgba(172, 144, 101, 0.45)' },
+  overlay: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
   header: { marginBottom: 32, alignItems: 'center' },
-  headerTitle: { fontSize: 36, fontWeight: 'bold', color: COLORS.white },
-  headerSub: { fontSize: 16, color: 'rgba(255,255,255,0.75)', marginTop: 6 },
+  headerImage: {
+      width: 160,
+      height: 160,
+      borderRadius: 80,
+      overflow: 'hidden',
+      borderWidth: 3,
+      borderColor: COLORS.saffron,
+  },
+  headerTitle: { fontSize: 36, fontWeight: 'bold', color: COLORS.saffron },
+
   card: {
-    backgroundColor: 'rgba(255,255,255,0.13)',
-    borderRadius: 24, padding: 28,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(139, 127, 84, 0.25))',
+    borderRadius: 24,
+    padding: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(39, 28, 9, 0.25)',
   },
   errorContainer: { minHeight: 20, marginBottom: 8 },
   error: { color: '#FF6B6B', textAlign: 'center', fontSize: 13 },
-  label: { color: COLORS.white, fontSize: 14, marginBottom: 8, fontWeight: '500' },
+  label: { color: COLORS.darkText, fontSize: 14, marginBottom: 8, fontWeight: '500' },
+
   input: {
     backgroundColor: 'rgba(255,255,255,0.92)',
-    borderRadius: 12, padding: 14,
-    fontSize: 15, color: COLORS.darkText, marginBottom: 16,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    color: COLORS.darkText,
+    marginBottom: 16,
   },
   passwordRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
   eyeBtn: { padding: 14, backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 12 },
+
   forgot: { alignSelf: 'flex-end', marginBottom: 20 },
-  forgotText: { color: COLORS.saffron, fontSize: 13, fontWeight: '500' },
+  forgotText: { color: COLORS.darkText, fontSize: 13, fontWeight: '500' },
+
   loginBtn: {
-    backgroundColor: COLORS.saffron, padding: 16,
-    borderRadius: 12, alignItems: 'center', marginBottom: 20,
+    backgroundColor: COLORS.saffron,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 20,
   },
   loginBtnText: { color: COLORS.white, fontSize: 16, fontWeight: 'bold' },
+
   orRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, gap: 12 },
-  orLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.3)' },
-  orText: { color: 'rgba(255,255,255,0.6)', fontSize: 13 },
+  orLine: { flex: 1, height: 1, backgroundColor: COLORS.darkText },
+  orText: { color:COLORS.darkText, fontSize: 13 },
+
   googleBtn: {
-    backgroundColor: 'rgba(255,255,255,0.92)', padding: 14,
-    borderRadius: 12, alignItems: 'center', marginBottom: 24, minHeight: 50,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 24,
+    minHeight: 50,
     justifyContent: 'center',
   },
   googleBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   googleBtnText: { color: COLORS.darkText, fontSize: 15, fontWeight: '600' },
-  signupLink: { textAlign: 'center', color: 'rgba(255,255,255,0.75)', fontSize: 14 },
+
+  signupLink: { textAlign: 'center', color: COLORS.darkText, fontSize: 14 },
   signupLinkBold: { color: COLORS.saffron, fontWeight: 'bold' },
 });

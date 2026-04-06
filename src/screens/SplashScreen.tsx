@@ -11,7 +11,7 @@ export default function SplashScreen({ navigation }: any) {
 
   return (
     <ImageBackground
-      source={require('../../assets/images/splash_bg.png')}
+      source={require('../../assets/images/splash1_bg.png')}
       style={styles.bg}
       resizeMode="cover">
       <View style={styles.overlay}>

@@ -8,7 +8,8 @@ import {
 import Ionicons from '@react-native-vector-icons/ionicons';
 import firestore from '@react-native-firebase/firestore';
 import Video from 'react-native-video';
-import { COLORS } from '../../constants/colors';
+import { useTheme } from '../../context/ThemeContext';
+import { useLang } from '../../context/LanguageContext';
 import { useAuthStore } from '../../store/authStore';
 
 const { width } = Dimensions.get('window');
@@ -37,9 +38,12 @@ interface Comment {
   userAvatar: string;
   text: string;
   createdAt: any;
+  replyTo?: string; 
 }
 
 export default function HomeFeedScreen({ navigation }: any) {
+  const { colors } = useTheme();
+  const { t } = useLang();
   const { userProfile, user, logout } = useAuthStore();
   const [showDropdown, setShowDropdown] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -49,6 +53,7 @@ export default function HomeFeedScreen({ navigation }: any) {
   const [commentText, setCommentText] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
   const [followingList, setFollowingList] = useState<string[]>([]);
+  const [replyingTo, setReplyingTo] = useState<{ id: string; userName: string } | null>(null);
 
   const isVideoUrl = (url: string) =>
     url?.includes('/video/upload/') || url?.endsWith('.mp4');
@@ -60,13 +65,11 @@ export default function HomeFeedScreen({ navigation }: any) {
         .orderBy('createdAt', 'desc')
         .limit(20)
         .get();
-
       const postsData = await Promise.all(
         snap.docs.map(async (doc) => {
           const data = doc.data();
           try {
-            const userDoc = await firestore()
-              .collection('users').doc(data.userId).get();
+            const userDoc = await firestore().collection('users').doc(data.userId).get();
             const userData = userDoc.data();
             return {
               id: doc.id, ...data,
@@ -75,12 +78,7 @@ export default function HomeFeedScreen({ navigation }: any) {
               userCategory: userData?.artistCategory || 'Folk Artist',
             } as Post;
           } catch {
-            return {
-              id: doc.id, ...data,
-              userName: 'Unknown Artist',
-              userAvatar: '',
-              userCategory: 'Folk Artist',
-            } as Post;
+            return { id: doc.id, ...data, userName: 'Unknown Artist', userAvatar: '', userCategory: 'Folk Artist' } as Post;
           }
         })
       );
@@ -96,10 +94,7 @@ export default function HomeFeedScreen({ navigation }: any) {
     } catch (e) { console.log('Following error:', e); }
   }, [user]);
 
-  useEffect(() => {
-    fetchPosts();
-    fetchFollowing();
-  }, []);
+  useEffect(() => { fetchPosts(); fetchFollowing(); }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -110,61 +105,40 @@ export default function HomeFeedScreen({ navigation }: any) {
 
   const handleLike = async (post: Post) => {
     if (!user?.uid) return;
-    const liked = post.likes?.includes(user.uid);
-
+    const liked = (post.likes || []).includes(user.uid);
     setPosts(prev => prev.map(p =>
       p.id === post.id ? {
         ...p,
-        likes: liked
-          ? (p.likes || []).filter(id => id !== user.uid)
-          : [...(p.likes || []), user.uid],
+        likes: liked ? (p.likes || []).filter(id => id !== user.uid) : [...(p.likes || []), user.uid],
       } : p
     ));
     try {
       await firestore().collection('posts').doc(post.id).update({
-        likes: liked
-          ? firestore.FieldValue.arrayRemove(user.uid)
-          : firestore.FieldValue.arrayUnion(user.uid),
+        likes: liked ? firestore.FieldValue.arrayRemove(user.uid) : firestore.FieldValue.arrayUnion(user.uid),
       });
-    } catch (e) {
-      console.log('Like error:', e);
-      fetchPosts(); 
-    }
+    } catch (e) { console.log('Like error:', e); fetchPosts(); }
   };
 
   const handleBookmark = async (post: Post) => {
     if (!user?.uid) return;
     const saved = (post.bookmarks || []).includes(user.uid);
-
     setPosts(prev => prev.map(p =>
       p.id === post.id ? {
         ...p,
-        bookmarks: saved
-          ? (p.bookmarks || []).filter(id => id !== user.uid)
-          : [...(p.bookmarks || []), user.uid],
+        bookmarks: saved ? (p.bookmarks || []).filter(id => id !== user.uid) : [...(p.bookmarks || []), user.uid],
       } : p
     ));
     try {
       await firestore().collection('posts').doc(post.id).update({
-        bookmarks: saved
-          ? firestore.FieldValue.arrayRemove(user.uid)
-          : firestore.FieldValue.arrayUnion(user.uid),
+        bookmarks: saved ? firestore.FieldValue.arrayRemove(user.uid) : firestore.FieldValue.arrayUnion(user.uid),
       });
-    } catch (e) {
-      console.log('Bookmark error:', e);
-      fetchPosts();
-    }
+    } catch (e) { console.log('Bookmark error:', e); fetchPosts(); }
   };
 
   const handleFollow = async (targetUserId: string) => {
     if (!user?.uid || targetUserId === user.uid) return;
     const isFollowing = followingList.includes(targetUserId);
-
-    setFollowingList(prev =>
-      isFollowing
-        ? prev.filter(id => id !== targetUserId)
-        : [...prev, targetUserId]
-    );
+    setFollowingList(prev => isFollowing ? prev.filter(id => id !== targetUserId) : [...prev, targetUserId]);
     try {
       const myRef = firestore().collection('users').doc(user.uid);
       const targetRef = firestore().collection('users').doc(targetUserId);
@@ -175,15 +149,14 @@ export default function HomeFeedScreen({ navigation }: any) {
         await myRef.update({ following: firestore.FieldValue.arrayUnion(targetUserId) });
         await targetRef.update({ followers: firestore.FieldValue.arrayUnion(user.uid) });
       }
-    } catch (e) {
-      console.log('Follow error:', e);
-      fetchFollowing(); 
-    }
+    } catch (e) { console.log('Follow error:', e); fetchFollowing(); }
   };
 
   const openComments = async (post: Post) => {
     setCommentPost(post);
     setComments([]);
+    setReplyingTo(null);
+    setCommentText('');
     setLoadingComments(true);
     try {
       const snap = await firestore()
@@ -192,46 +165,44 @@ export default function HomeFeedScreen({ navigation }: any) {
         .orderBy('createdAt', 'asc')
         .get();
       setComments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Comment)));
-    } catch (e) {
-      console.log('Comments error:', e);
-    } finally {
-      setLoadingComments(false);
-    }
+    } catch (e) { console.log('Comments error:', e); }
+    finally { setLoadingComments(false); }
+  };
+
+  const handleReply = (comment: Comment) => {
+    setReplyingTo({ id: comment.id, userName: comment.userName });
+    setCommentText(`@${comment.userName} `);
+  };
+
+  const cancelReply = () => {
+    setReplyingTo(null);
+    setCommentText('');
   };
 
   const sendComment = async () => {
     if (!commentText.trim() || !commentPost || !user?.uid) return;
     const text = commentText.trim();
     setCommentText('');
+    const replyToUser = replyingTo?.userName || null;
+    setReplyingTo(null);
+
     const tempComment: Comment = {
-      id: `temp_${Date.now()}`,
-      userId: user.uid,
-      userName: userProfile?.name || 'User',
-      userAvatar: userProfile?.avatarUrl || '',
-      text,
-      createdAt: new Date(),
+      id: `temp_${Date.now()}`, userId: user.uid,
+      userName: userProfile?.name || 'User', userAvatar: userProfile?.avatarUrl || '',
+      text, createdAt: new Date(),
+      replyTo: replyToUser || undefined,
     };
     setComments(prev => [...prev, tempComment]);
     try {
-      const ref = await firestore()
-        .collection('posts').doc(commentPost.id)
-        .collection('comments').add({
-          userId: user.uid,
-          userName: userProfile?.name || 'User',
-          userAvatar: userProfile?.avatarUrl || '',
-          text,
-          createdAt: firestore.FieldValue.serverTimestamp(),
-        });
-      await firestore().collection('posts').doc(commentPost.id).update({
-        commentCount: firestore.FieldValue.increment(1),
+      const ref = await firestore().collection('posts').doc(commentPost.id).collection('comments').add({
+        userId: user.uid, userName: userProfile?.name || 'User',
+        userAvatar: userProfile?.avatarUrl || '', text,
+        replyTo: replyToUser || null,
+        createdAt: firestore.FieldValue.serverTimestamp(),
       });
-      setComments(prev =>
-        prev.map(c => c.id === tempComment.id ? { ...c, id: ref.id } : c)
-      );
-      setPosts(prev => prev.map(p =>
-        p.id === commentPost.id
-          ? { ...p, commentCount: (p.commentCount || 0) + 1 } : p
-      ));
+      await firestore().collection('posts').doc(commentPost.id).update({ commentCount: firestore.FieldValue.increment(1) });
+      setComments(prev => prev.map(c => c.id === tempComment.id ? { ...c, id: ref.id } : c));
+      setPosts(prev => prev.map(p => p.id === commentPost.id ? { ...p, commentCount: (p.commentCount || 0) + 1 } : p));
     } catch (e) {
       console.log('Comment error:', e);
       setComments(prev => prev.filter(c => c.id !== tempComment.id));
@@ -240,9 +211,9 @@ export default function HomeFeedScreen({ navigation }: any) {
 
   const showPostMenu = (post: Post) => {
     if (post.userId === user?.uid) {
-      Alert.alert('Post Options', '', [
+      Alert.alert(t.postOptions, '', [
         {
-          text: 'Delete Post', style: 'destructive',
+          text: t.deletePost, style: 'destructive',
           onPress: async () => {
             try {
               await firestore().collection('posts').doc(post.id).delete();
@@ -250,12 +221,12 @@ export default function HomeFeedScreen({ navigation }: any) {
             } catch (e) { console.log('Delete error:', e); }
           },
         },
-        { text: 'Cancel', style: 'cancel' },
+        { text: t.cancel, style: 'cancel' },
       ]);
     } else {
-      Alert.alert('Post Options', '', [
-        { text: 'Report Post', onPress: () => Alert.alert('Reported', 'Thank you for your report') },
-        { text: 'Cancel', style: 'cancel' },
+      Alert.alert(t.postOptions, '', [
+        { text: t.reportPost, onPress: () => Alert.alert(t.reported, t.thankYouReport) },
+        { text: t.cancel, style: 'cancel' },
       ]);
     }
   };
@@ -264,10 +235,10 @@ export default function HomeFeedScreen({ navigation }: any) {
     if (!timestamp) return '';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     const diff = (Date.now() - date.getTime()) / 1000;
-    if (diff < 60) return 'Just now';
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
+    if (diff < 60) return t.justNowText;
+    if (diff < 3600) return `${Math.floor(diff / 60)}${t.mAgo}`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}${t.hAgo}`;
+    return `${Math.floor(diff / 86400)}${t.dAgo}`;
   };
 
   const handleLogout = async () => {
@@ -281,237 +252,243 @@ export default function HomeFeedScreen({ navigation }: any) {
     const isFollowing = followingList.includes(item.userId);
     const isOwnPost = item.userId === user?.uid;
     const isVideo = isVideoUrl(item.imageUrl);
+    const savedCount = item.bookmarks?.length || 0;
 
     return (
-      <View style={styles.postCard}>
-        {/* Header */}
+      <View style={[styles.postCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        {/* header */}
         <View style={styles.postHeader}>
-          <View style={styles.postUserInfo}>
+          <TouchableOpacity
+            style={styles.postUserInfo}
+            onPress={() => navigation.navigate('UserProfile', { userId: item.userId })}>
             {item.userAvatar ? (
               <Image source={{ uri: item.userAvatar }} style={styles.postAvatar} />
             ) : (
-              <View style={styles.postAvatarPlaceholder}>
-                <Ionicons name="person" size={16} color={COLORS.saffron} />
+              <View style={[styles.postAvatarPlaceholder, { backgroundColor: colors.warmBg }]}>
+                <Ionicons name="person" size={16} color={colors.saffron} />
               </View>
             )}
             <View>
-              <Text style={styles.postUserName}>{item.userName}</Text>
-              <Text style={styles.postUserCategory}>{item.userCategory}</Text>
+              <Text style={[styles.postUserName, { color: colors.darkText }]}>{item.userName}</Text>
+              <Text style={[styles.postUserCategory, { color: colors.muted }]}>{item.userCategory}</Text>
             </View>
-          </View>
+          </TouchableOpacity>
           <View style={styles.postHeaderRight}>
             {!isOwnPost && (
               <TouchableOpacity
-                style={[styles.followBtn, isFollowing && styles.followingBtn]}
+                style={[styles.followBtn, { borderColor: colors.saffron }, isFollowing && { backgroundColor: colors.warmBg, borderColor: colors.border }]}
                 onPress={() => handleFollow(item.userId)}>
-                <Text style={[styles.followBtnText, isFollowing && styles.followingBtnText]}>
-                  {isFollowing ? 'Following' : 'Follow'}
+                <Text style={[styles.followBtnText, { color: colors.saffron }, isFollowing && { color: colors.muted }]}>
+                  {isFollowing ? t.following_btn : t.follow}
                 </Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity onPress={() => showPostMenu(item)}>
-              <Ionicons name="ellipsis-vertical" size={18} color={COLORS.muted} />
+              <Ionicons name="ellipsis-vertical" size={18} color={colors.muted} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Media */}
+        {/* media */}
         <View style={styles.mediaContainer}>
           {isVideo ? (
-            <Video
-              source={{ uri: item.imageUrl }}
-              style={styles.postImage}
-              resizeMode="cover"
-              controls={true}
-              paused={true}
-              repeat={false}
-            />
+            <Video source={{ uri: item.imageUrl }} style={styles.postImage} resizeMode="cover" controls={true} paused={true} repeat={false} />
           ) : item.imageUrl ? (
-            <Image
-              source={{ uri: item.imageUrl }}
-              style={styles.postImage}
-              resizeMode="cover"
-            />
+            <Image source={{ uri: item.imageUrl }} style={styles.postImage} resizeMode="cover" />
           ) : null}
           {item.mediaItems && item.mediaItems.length > 1 && (
             <View style={styles.mediaCountBadge}>
-              <Ionicons name="copy-outline" size={14} color={COLORS.white} />
+              <Ionicons name="copy-outline" size={14} color="#fff" />
               <Text style={styles.mediaCountText}>{item.mediaItems.length}</Text>
             </View>
           )}
         </View>
 
-        {/* Actions */}
+        {/* actions */}
         <View style={styles.postActions}>
           <View style={styles.postActionsLeft}>
             <TouchableOpacity style={styles.actionBtn} onPress={() => handleLike(item)}>
-              <Ionicons
-                name={liked ? 'heart' : 'heart-outline'}
-                size={24}
-                color={liked ? '#FF4444' : COLORS.darkText}
-              />
+              <Ionicons name={liked ? 'heart' : 'heart-outline'} size={24} color={liked ? '#FF4444' : colors.darkText} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionBtn} onPress={() => openComments(item)}>
-              <Ionicons name="chatbubble-outline" size={22} color={COLORS.darkText} />
+              <Ionicons name="chatbubble-outline" size={22} color={colors.darkText} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.actionBtn}
               onPress={async () => {
                 try {
-                  await Share.share({
-                    title: item.title || 'FolkChat Artwork',
-                    message: ` ${item.title || 'Check out this folk art!'}\n\nBy ${item.userName} · ${item.category}\n\n${item.caption || ''}\n\nShared from FolkChat — Sri Lankan Folk Arts Platform`,
-                  });
-                } catch (e) {
-                  console.log('Share error:', e);
-                }
+                  await Share.share({ title: item.title || 'FolkChat Artwork', message: `${item.title || 'Check out this folk art!'}\n\nBy ${item.userName}\n\n${item.caption || ''}\n\nShared from FolkChat` });
+                } catch (e) { console.log('Share error:', e); }
               }}>
-              <Ionicons name="paper-plane-outline" size={22} color={COLORS.darkText} />
+              <Ionicons name="paper-plane-outline" size={22} color={colors.darkText} />
             </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={() => handleBookmark(item)}>
-            <Ionicons
-              name={saved ? 'bookmark' : 'bookmark-outline'}
-              size={22}
-              color={saved ? COLORS.saffron : COLORS.darkText}
-            />
-          </TouchableOpacity>
+         
+          <View style={styles.bookmarkRow}>
+            {isOwnPost && savedCount > 0 && (
+              <Text style={[styles.savedCount, { color: colors.muted }]}>{savedCount}</Text>
+            )}
+            <TouchableOpacity onPress={() => handleBookmark(item)}>
+              <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={22} color={saved ? colors.saffron : colors.darkText} />
+            </TouchableOpacity>
+          </View>
         </View>
-
-        {/* Likes */}
+      
+       {/*Likes*/}
         {(item.likes || []).length > 0 && (
-          <Text style={styles.likesCount}>
-            {item.likes.length} like{item.likes.length > 1 ? 's' : ''}
+          <Text style={[styles.likesCount, { color: colors.darkText }]}>
+            {item.likes.length} {item.likes.length > 1 ? t.likes : t.like}
           </Text>
         )}
 
-        {/* Title & Caption */}
+        {/*Title & Caption*/}
         {item.title && (
           <View style={styles.captionRow}>
-            <Text style={styles.captionUser}>{item.userName} </Text>
-            <Text style={styles.captionText}>{item.title}</Text>
+            <Text style={[styles.captionUser, { color: colors.darkText }]}>{item.userName} </Text>
+            <Text style={[styles.captionText, { color: colors.darkText }]}>{item.title}</Text>
           </View>
         )}
-        {item.caption ? (
-          <Text style={styles.captionDesc}>{item.caption}</Text>
-        ) : null}
+        {item.caption ? <Text style={[styles.captionDesc, { color: colors.muted }]}>{item.caption}</Text> : null}
 
-        {/* Category */}
         {item.category && (
           <View style={styles.categoryTag}>
-            <Text style={styles.categoryTagText}># {item.category}</Text>
+            <Text style={[styles.categoryTagText, { color: colors.saffron }]}># {item.category}</Text>
           </View>
         )}
 
-        {/* Comments */}
+        {/*Comments*/}
         {item.commentCount > 0 && (
           <TouchableOpacity onPress={() => openComments(item)}>
-            <Text style={styles.viewComments}>
-              View all {item.commentCount} comment{item.commentCount > 1 ? 's' : ''}
+            <Text style={[styles.viewComments, { color: colors.muted }]}>
+              {t.viewAllComments} {item.commentCount} {item.commentCount > 1 ? `${t.comment}s` : t.comment}
             </Text>
           </TouchableOpacity>
         )}
 
-        <Text style={styles.postTime}>{formatTime(item.createdAt)}</Text>
+        <Text style={[styles.postTime, { color: colors.muted }]}>{formatTime(item.createdAt)}</Text>
       </View>
     );
   };
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.logo}>FolkChat</Text>
+    <View style={[styles.container, { backgroundColor: colors.warmBg }]}>
+      {/* header */}
+      <View style={[styles.header, { backgroundColor: colors.header, borderBottomColor: colors.border }]}>
+        <Text style={[styles.logo, { color: colors.saffron }]}>Folk<Text style={{ color: colors.darkText}}>Chat</Text></Text>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.notifBtn}
-            onPress={() => navigation.navigate('Notifications')}>
-            <Ionicons name="notifications-outline" size={24} color={COLORS.darkText} />
+          <TouchableOpacity style={styles.notifBtn} onPress={() => navigation.navigate('Notifications')}>
+            <Ionicons name="notifications-outline" size={24} color={colors.darkText} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.avatarBtn} onPress={() => setShowDropdown(true)}>
             {userProfile?.avatarUrl ? (
-              <Image source={{ uri: userProfile.avatarUrl }} style={styles.avatar} />
+              <Image source={{ uri: userProfile.avatarUrl }} style={[styles.avatar, { borderColor: colors.saffron }]} />
             ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Ionicons name="person" size={18} color={COLORS.saffron} />
+              <View style={[styles.avatarPlaceholder, { backgroundColor: colors.warmBg, borderColor: colors.saffron }]}>
+                <Ionicons name="person" size={18} color={colors.saffron} />
               </View>
             )}
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Feed */}
+      {/* feed */}
       <FlatList
         data={posts}
         keyExtractor={(item) => item.id}
         renderItem={renderPost}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.saffron]} />
-        }
+        contentContainerStyle={{ paddingTop: 10, paddingBottom: 20 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.saffron]} />}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="images-outline" size={56} color={COLORS.muted} />
-            <Text style={styles.emptyTitle}>No posts yet</Text>
-            <Text style={styles.emptyText}>Be the first to share your folk art!</Text>
+            <Ionicons name="images-outline" size={56} color={colors.muted} />
+            <Text style={[styles.emptyTitle, { color: colors.darkText }]}>{t.noPostsYet}</Text>
+            <Text style={[styles.emptyText, { color: colors.muted }]}>{t.noPostsYetOwn}</Text>
           </View>
         }
       />
 
       {/* Comments Modal */}
       <Modal visible={commentPost !== null} animationType="slide" transparent>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}>
-          <Pressable style={styles.commentOverlay} onPress={() => setCommentPost(null)}>
-            <Pressable style={styles.commentSheet}>
-              <View style={styles.commentHeader}>
-                <Text style={styles.commentTitle}>Comments</Text>
-                <TouchableOpacity onPress={() => setCommentPost(null)}>
-                  <Ionicons name="close" size={24} color={COLORS.darkText} />
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <Pressable style={styles.commentOverlay} onPress={() => { setCommentPost(null); setReplyingTo(null); }}>
+            <Pressable style={[styles.commentSheet, { backgroundColor: colors.card }]}>
+              <View style={[styles.commentHeader, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.commentTitle, { color: colors.darkText }]}>Comments</Text>
+                <TouchableOpacity onPress={() => { setCommentPost(null); setReplyingTo(null); }}>
+                  <Ionicons name="close" size={24} color={colors.darkText} />
                 </TouchableOpacity>
               </View>
+
               <ScrollView style={styles.commentList} showsVerticalScrollIndicator={false}>
                 {loadingComments ? (
-                  <Text style={styles.loadingText}>Loading...</Text>
+                  <Text style={[styles.loadingText, { color: colors.muted }]}>{t.loading}</Text>
                 ) : comments.length === 0 ? (
-                  <Text style={styles.noComments}>No comments yet. Be first!</Text>
+                  <Text style={[styles.noComments, { color: colors.muted }]}>{t.beFirstComment}</Text>
                 ) : (
                   comments.map(c => (
                     <View key={c.id} style={styles.commentItem}>
                       {c.userAvatar ? (
                         <Image source={{ uri: c.userAvatar }} style={styles.commentAvatar} />
                       ) : (
-                        <View style={styles.commentAvatarPlaceholder}>
-                          <Ionicons name="person" size={14} color={COLORS.saffron} />
+                        <View style={[styles.commentAvatarPlaceholder, { backgroundColor: colors.warmBg }]}>
+                          <Ionicons name="person" size={14} color={colors.saffron} />
                         </View>
                       )}
                       <View style={styles.commentContent}>
-                        <Text style={styles.commentUser}>{c.userName}</Text>
-                        <Text style={styles.commentText}>{c.text}</Text>
+                        <Text style={[styles.commentUser, { color: colors.darkText }]}>{c.userName}</Text>
+                        {/* reply tag highlight */}
+                        {c.replyTo ? (
+                          <Text style={[styles.commentText, { color: colors.darkText }]}>
+                            <Text style={{ color: colors.saffron, fontWeight: '600' }}>@{c.replyTo} </Text>
+                            {c.text.replace(`@${c.replyTo} `, '').replace(`@${c.replyTo}`, '')}
+                          </Text>
+                        ) : (
+                          <Text style={[styles.commentText, { color: colors.darkText }]}>{c.text}</Text>
+                        )}
+                        {/* reply button */}
+                        <TouchableOpacity
+                          style={styles.replyBtn}
+                          onPress={() => handleReply(c)}>
+                          <Text style={[styles.replyBtnText, { color: colors.muted }]}>Reply</Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
                   ))
                 )}
               </ScrollView>
-              <View style={styles.commentInput}>
+
+              {/* reply indicator */}
+              {replyingTo && (
+                <View style={[styles.replyIndicator, { backgroundColor: colors.warmBg, borderTopColor: colors.border }]}>
+                  <Text style={[styles.replyIndicatorText, { color: colors.muted }]}>
+                    Replying to <Text style={{ color: colors.saffron, fontWeight: '600' }}>@{replyingTo.userName}</Text>
+                  </Text>
+                  <TouchableOpacity onPress={cancelReply}>
+                    <Ionicons name="close-circle" size={18} color={colors.muted} />
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              <View style={[styles.commentInput, { borderTopColor: colors.border }]}>
                 {userProfile?.avatarUrl ? (
                   <Image source={{ uri: userProfile.avatarUrl }} style={styles.commentAvatar} />
                 ) : (
-                  <View style={styles.commentAvatarPlaceholder}>
-                    <Ionicons name="person" size={14} color={COLORS.saffron} />
+                  <View style={[styles.commentAvatarPlaceholder, { backgroundColor: colors.warmBg }]}>
+                    <Ionicons name="person" size={14} color={colors.saffron} />
                   </View>
                 )}
                 <TextInput
-                  style={styles.commentTextInput}
-                  placeholder="Add a comment..."
-                  placeholderTextColor={COLORS.muted}
+                  style={[styles.commentTextInput, { backgroundColor: colors.offwhite, color: colors.darkText }]}
+                  placeholder={replyingTo ? `Reply to @${replyingTo.userName}...` : t.addComment}
+                  placeholderTextColor={colors.muted}
                   value={commentText}
                   onChangeText={setCommentText}
                   multiline
+                  autoFocus={!!replyingTo}
                 />
                 <TouchableOpacity onPress={sendComment} disabled={!commentText.trim()}>
-                  <Ionicons name="send" size={22}
-                    color={commentText.trim() ? COLORS.saffron : COLORS.muted} />
+                  <Ionicons name="send" size={22} color={commentText.trim() ? colors.saffron : colors.muted} />
                 </TouchableOpacity>
               </View>
             </Pressable>
@@ -519,34 +496,34 @@ export default function HomeFeedScreen({ navigation }: any) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Dropdown */}
+      {/* dropdown */}
       <Modal visible={showDropdown} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setShowDropdown(false)}>
-          <View style={styles.dropdown}>
+          <View style={[styles.dropdown, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.dropdownHeader}>
-              <Text style={styles.dropdownName}>{userProfile?.name || 'Your Name'}</Text>
-              <Text style={styles.dropdownEmail}>{user?.email || ''}</Text>
+              <Text style={[styles.dropdownName, { color: colors.darkText }]}>{userProfile?.name || 'Your Name'}</Text>
+              <Text style={[styles.dropdownEmail, { color: colors.muted }]}>{user?.email || ''}</Text>
             </View>
-            <View style={styles.dropdownDivider} />
+            <View style={[styles.dropdownDivider, { backgroundColor: colors.border }]} />
             <TouchableOpacity style={styles.dropdownItem}
-              onPress={() => { setShowDropdown(false); navigation.navigate('Profile'); }}>
-              <Ionicons name="person-outline" size={18} color={COLORS.darkText} />
-              <Text style={styles.dropdownLabel}>My Profile</Text>
+              onPress={() => { setShowDropdown(false); navigation.navigate('UserProfile', { userId: user?.uid }); }}>
+              <Ionicons name="person-outline" size={18} color={colors.darkText} />
+              <Text style={[styles.dropdownLabel, { color: colors.darkText }]}>{t.myProfile}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.dropdownItem}
               onPress={() => { setShowDropdown(false); navigation.navigate('Analytics'); }}>
-              <Ionicons name="analytics-outline" size={18} color={COLORS.darkText} />
-              <Text style={styles.dropdownLabel}>Analytics</Text>
+              <Ionicons name="analytics-outline" size={18} color={colors.darkText} />
+              <Text style={[styles.dropdownLabel, { color: colors.darkText }]}>{t.analytics}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.dropdownItem}
               onPress={() => { setShowDropdown(false); navigation.navigate('EditProfile'); }}>
-              <Ionicons name="create-outline" size={18} color={COLORS.darkText} />
-              <Text style={styles.dropdownLabel}>Edit Profile</Text>
+              <Ionicons name="create-outline" size={18} color={colors.darkText} />
+              <Text style={[styles.dropdownLabel, { color: colors.darkText }]}>{t.editProfile}</Text>
             </TouchableOpacity>
-            <View style={styles.dropdownDivider} />
+            <View style={[styles.dropdownDivider, { backgroundColor: colors.border }]} />
             <TouchableOpacity style={styles.dropdownItem} onPress={handleLogout}>
               <Ionicons name="log-out-outline" size={18} color="#FF4444" />
-              <Text style={[styles.dropdownLabel, { color: '#FF4444' }]}>Logout</Text>
+              <Text style={[styles.dropdownLabel, { color: '#FF4444' }]}>{t.logout}</Text>
             </TouchableOpacity>
           </View>
         </Pressable>
@@ -556,122 +533,81 @@ export default function HomeFeedScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.offwhite },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, paddingTop: 52, paddingBottom: 12,
-    backgroundColor: COLORS.white, borderBottomWidth: 0.5, borderBottomColor: COLORS.border,
+    paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8,
+    borderBottomWidth: 0.5,
   },
-  logo: { fontSize: 22, fontWeight: 'bold', color: COLORS.darkText },
+  logo: { fontSize: 22, fontWeight: 'bold' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   notifBtn: { padding: 4 },
   avatarBtn: { padding: 2 },
-  avatar: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: COLORS.saffron },
-  avatarPlaceholder: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: COLORS.warmBg, justifyContent: 'center', alignItems: 'center',
-    borderWidth: 2, borderColor: COLORS.saffron,
-  },
-  postCard: {
-    backgroundColor: COLORS.white, marginBottom: 8,
-    borderBottomWidth: 0.5, borderBottomColor: COLORS.border,
-  },
-  postHeader: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', padding: 12,
-  },
-  postUserInfo: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  avatar: { width: 36, height: 36, borderRadius: 18, borderWidth: 2 },
+  avatarPlaceholder: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 2 },
+  postCard: { marginBottom: 12, marginHorizontal: 12, borderRadius: 16, borderWidth: 1, overflow: 'hidden', elevation: 2 },
+  postHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 },
+  postUserInfo: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   postAvatar: { width: 40, height: 40, borderRadius: 20 },
-  postAvatarPlaceholder: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: COLORS.warmBg, justifyContent: 'center', alignItems: 'center',
-  },
-  postUserName: { fontSize: 14, fontWeight: 'bold', color: COLORS.darkText },
-  postUserCategory: { fontSize: 12, color: COLORS.muted },
+  postAvatarPlaceholder: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  postUserName: { fontSize: 14, fontWeight: 'bold' },
+  postUserCategory: { fontSize: 12 },
   postHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  followBtn: {
-    borderWidth: 1, borderColor: COLORS.saffron,
-    borderRadius: 16, paddingHorizontal: 14, paddingVertical: 5,
-  },
-  followingBtn: { backgroundColor: COLORS.warmBg, borderColor: COLORS.border },
-  followBtnText: { color: COLORS.saffron, fontSize: 13, fontWeight: '600' },
-  followingBtnText: { color: COLORS.muted },
+  followBtn: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 5 },
+  followBtnText: { fontSize: 13, fontWeight: '600' },
   mediaContainer: { position: 'relative' },
   postImage: { width, height: width },
   mediaCountBadge: {
     position: 'absolute', top: 12, right: 12,
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12,
-    paddingHorizontal: 8, paddingVertical: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4,
   },
-  mediaCountText: { color: COLORS.white, fontSize: 12, fontWeight: '600' },
-  postActions: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8,
-  },
+  mediaCountText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  postActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8 },
   postActionsLeft: { flexDirection: 'row', gap: 16 },
   actionBtn: { padding: 2 },
-  likesCount: { paddingHorizontal: 14, fontSize: 13, fontWeight: 'bold', color: COLORS.darkText },
+  bookmarkRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  savedCount: { fontSize: 12, fontWeight: '600' },
+  likesCount: { paddingHorizontal: 14, fontSize: 13, fontWeight: 'bold' },
   captionRow: { flexDirection: 'row', paddingHorizontal: 14, paddingTop: 4, flexWrap: 'wrap' },
-  captionUser: { fontSize: 13, fontWeight: 'bold', color: COLORS.darkText },
-  captionText: { fontSize: 13, color: COLORS.darkText },
-  captionDesc: { paddingHorizontal: 14, fontSize: 13, color: COLORS.muted, marginTop: 2 },
+  captionUser: { fontSize: 13, fontWeight: 'bold' },
+  captionText: { fontSize: 13 },
+  captionDesc: { paddingHorizontal: 14, fontSize: 13, marginTop: 2 },
   categoryTag: { paddingHorizontal: 14, paddingVertical: 4 },
-  categoryTagText: { fontSize: 12, color: COLORS.saffron, fontWeight: '500' },
-  viewComments: { paddingHorizontal: 14, fontSize: 13, color: COLORS.muted, marginBottom: 2 },
-  postTime: { paddingHorizontal: 14, paddingBottom: 12, fontSize: 11, color: COLORS.muted },
+  categoryTagText: { fontSize: 12, fontWeight: '500' },
+  viewComments: { paddingHorizontal: 14, fontSize: 13, marginBottom: 2 },
+  postTime: { paddingHorizontal: 14, paddingBottom: 12, fontSize: 11 },
   emptyState: { alignItems: 'center', justifyContent: 'center', paddingTop: 100, gap: 12 },
-  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.darkText },
-  emptyText: { fontSize: 14, color: COLORS.muted },
-  uploadBtn: {
-    backgroundColor: COLORS.saffron, paddingHorizontal: 24,
-    paddingVertical: 12, borderRadius: 10, marginTop: 4,
-  },
-  uploadBtnText: { color: COLORS.white, fontWeight: '600' },
+  emptyTitle: { fontSize: 18, fontWeight: 'bold' },
+  emptyText: { fontSize: 14 },
   commentOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  commentSheet: {
-    backgroundColor: COLORS.white, borderTopLeftRadius: 24,
-    borderTopRightRadius: 24, height: '70%',
-  },
-  commentHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    padding: 20, borderBottomWidth: 0.5, borderBottomColor: COLORS.border,
-  },
-  commentTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.darkText },
+  commentSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, height: '75%' },
+  commentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 0.5 },
+  commentTitle: { fontSize: 16, fontWeight: 'bold' },
   commentList: { flex: 1, padding: 16 },
-  loadingText: { textAlign: 'center', color: COLORS.muted, marginTop: 20 },
-  noComments: { textAlign: 'center', color: COLORS.muted, marginTop: 40, fontSize: 14 },
+  loadingText: { textAlign: 'center', marginTop: 20 },
+  noComments: { textAlign: 'center', marginTop: 40, fontSize: 14 },
   commentItem: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  commentAvatar: { width: 32, height: 32, borderRadius: 16 },
-  commentAvatarPlaceholder: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: COLORS.warmBg, justifyContent: 'center', alignItems: 'center',
-  },
+  commentAvatar: { width: 36, height: 36, borderRadius: 18 },
+  commentAvatarPlaceholder: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   commentContent: { flex: 1 },
-  commentUser: { fontSize: 13, fontWeight: 'bold', color: COLORS.darkText, marginBottom: 2 },
-  commentText: { fontSize: 13, color: COLORS.darkText, lineHeight: 18 },
-  commentInput: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    padding: 12, borderTopWidth: 0.5, borderTopColor: COLORS.border,
+  commentUser: { fontSize: 13, fontWeight: 'bold', marginBottom: 2 },
+  commentText: { fontSize: 13, lineHeight: 18 },
+  replyBtn: { marginTop: 4 },
+  replyBtnText: { fontSize: 12, fontWeight: '600' },
+  replyIndicator: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 8, borderTopWidth: 0.5,
   },
-  commentTextInput: {
-    flex: 1, backgroundColor: COLORS.offwhite, borderRadius: 20,
-    paddingHorizontal: 14, paddingVertical: 8, fontSize: 14,
-    color: COLORS.darkText, maxHeight: 80,
-  },
+  replyIndicatorText: { fontSize: 13 },
+  commentInput: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderTopWidth: 0.5 },
+  commentTextInput: { flex: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, fontSize: 14, maxHeight: 80 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' },
-  dropdown: {
-    position: 'absolute', top: 90, right: 16,
-    backgroundColor: COLORS.white, borderRadius: 16, width: 220,
-    elevation: 8, borderWidth: 0.5, borderColor: COLORS.border,
-  },
+  dropdown: { position: 'absolute', top: 80, right: 16, borderRadius: 16, width: 220, elevation: 8, borderWidth: 0.5 },
   dropdownHeader: { padding: 16, paddingBottom: 12 },
-  dropdownName: { fontSize: 15, fontWeight: 'bold', color: COLORS.darkText },
-  dropdownEmail: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
-  dropdownDivider: { height: 0.5, backgroundColor: COLORS.border },
-  dropdownItem: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    padding: 14, paddingHorizontal: 16,
-  },
-  dropdownLabel: { fontSize: 14, color: COLORS.darkText, fontWeight: '500' },
+  dropdownName: { fontSize: 15, fontWeight: 'bold' },
+  dropdownEmail: { fontSize: 12, marginTop: 2 },
+  dropdownDivider: { height: 0.5 },
+  dropdownItem: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, paddingHorizontal: 16 },
+  dropdownLabel: { fontSize: 14, fontWeight: '500' },
 });

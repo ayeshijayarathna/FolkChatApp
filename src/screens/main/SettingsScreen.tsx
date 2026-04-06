@@ -1,141 +1,339 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Alert,
+  ScrollView, Alert, Image, Modal, Switch,
 } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { COLORS } from '../../constants/colors';
+import { launchImageLibrary } from 'react-native-image-picker';
+import { useTheme } from '../../context/ThemeContext';
+import { useLang, Lang } from '../../context/LanguageContext';
 import { useAuthStore } from '../../store/authStore';
 
+const LANGUAGES: Lang[] = ['English', 'Sinhala', 'Tamil'];
+
+const CHAT_THEMES = [
+  { id: 'default', label: 'Default', bg: '#F0EBE3' },
+  { id: 'dark', label: 'Dark', bg: '#1a1a2e' },
+  { id: 'ocean', label: 'Ocean', bg: '#E3F2FD' },
+  { id: 'forest', label: 'Forest', bg: '#E8F5E9' },
+  { id: 'sunset', label: 'Sunset', bg: '#FFF3E0' },
+  { id: 'lavender', label: 'Lavender', bg: '#F3E5F5' },
+];
+
 export default function SettingsScreen({ navigation }: any) {
+  const { colors, isDark, toggleTheme } = useTheme();
+  const { language, setLanguage, t } = useLang();
   const { user, userProfile, logout } = useAuthStore();
 
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const [showThemeModal, setShowThemeModal] = useState(false);
+  const [selectedChatTheme, setSelectedChatTheme] = useState('default');
+  const [customBg, setCustomBg] = useState<string | null>(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => { await logout(); },
-        },
-      ]
-    );
+    Alert.alert(t.logout, 'Are you sure?', [
+      { text: t.cancel, style: 'cancel' },
+      { text: t.logout, style: 'destructive', onPress: async () => { await logout(); } },
+    ]);
   };
 
-  const MenuItem = ({ icon, label, onPress, color = COLORS.darkText, rightText = '' }: any) => (
+  const pickCustomBg = async () => {
+    const result = await launchImageLibrary({ mediaType: 'photo', quality: 0.8 });
+    if (result.assets?.[0]?.uri) {
+      setCustomBg(result.assets[0].uri);
+      setSelectedChatTheme('custom');
+      setShowThemeModal(false);
+    }
+  };
+
+  const MenuItem = ({ icon, label, onPress, rightContent, danger }: any) => (
     <TouchableOpacity style={styles.menuItem} onPress={onPress}>
       <View style={styles.menuLeft}>
-        <View style={[styles.iconBox, { backgroundColor: COLORS.warmBg }]}>
-          <Ionicons name={icon} size={18} color={COLORS.saffron} />
+        <View style={[styles.iconBox, { backgroundColor: danger ? '#FFF0F0' : colors.warmBg }]}>
+          <Ionicons name={icon} size={18} color={danger ? '#FF4444' : colors.saffron} />
         </View>
-        <Text style={[styles.menuLabel, { color }]}>{label}</Text>
+        <Text style={[styles.menuLabel, { color: danger ? '#FF4444' : colors.darkText }]}>{label}</Text>
       </View>
       <View style={styles.menuRight}>
-        {rightText ? <Text style={styles.menuRightText}>{rightText}</Text> : null}
-        <Ionicons name="chevron-forward" size={16} color={COLORS.muted} />
+        {rightContent}
+        <Ionicons name="chevron-forward" size={16} color={danger ? '#FF4444' : colors.muted} />
       </View>
     </TouchableOpacity>
   );
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <Text style={styles.title}>Settings</Text>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.bg }]}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingBottom: 40 }}>
+
+      <Text style={[styles.title, { color: colors.darkText }]}>{t.settings_title}</Text>
 
       {/* Profile Card */}
       <TouchableOpacity
-        style={styles.profileCard}
-        onPress={() => navigation.navigate('Profile')}>
-        <View style={styles.avatarCircle}>
-          <Ionicons name="person" size={28} color={COLORS.saffron} />
-        </View>
+        style={[styles.profileCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+        onPress={() => navigation.navigate('UserProfile', { userId: user?.uid })}>
+        {userProfile?.avatarUrl ? (
+          <Image source={{ uri: userProfile.avatarUrl }} style={[styles.profileAvatar, { borderColor: colors.saffron }]} />
+        ) : (
+          <View style={[styles.avatarCircle, { backgroundColor: colors.warmBg, borderColor: colors.saffron }]}>
+            <Ionicons name="person" size={28} color={colors.saffron} />
+          </View>
+        )}
         <View style={{ flex: 1 }}>
-          <Text style={styles.profileName}>{userProfile?.name || 'Your Name'}</Text>
-          <Text style={styles.profileCategory}>{userProfile?.artistCategory || 'Folk Artist'}</Text>
+          <Text style={[styles.profileName, { color: colors.darkText }]}>{userProfile?.name || 'Your Name'}</Text>
+          <Text style={[styles.profileSub, { color: colors.saffron }]}>{userProfile?.artistCategory || 'Folk Artist'}</Text>
+          <Text style={[styles.profileEmail, { color: colors.muted }]}>{user?.email || ''}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={20} color={COLORS.muted} />
+        <Ionicons name="chevron-forward" size={20} color={colors.muted} />
       </TouchableOpacity>
 
       {/* Account */}
-      <Text style={styles.sectionTitle}>ACCOUNT</Text>
-      <View style={styles.section}>
-        <MenuItem icon="person-outline" label="Edit Profile"
-          onPress={() => navigation.navigate('EditProfile')} />
-        <View style={styles.divider} />
-        <MenuItem icon="analytics-outline" label="View Analytics"
-          onPress={() => navigation.navigate('Analytics')} />
-        <View style={styles.divider} />
-        <MenuItem icon="lock-closed-outline" label="Change Password" onPress={() => {}} />
+      <Text style={[styles.sectionTitle, { color: colors.muted }]}>{t.account}</Text>
+      <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <MenuItem icon="create-outline" label={t.editProfile}
+          onPress={() => navigation.navigate('EditProfile')} rightContent={null} />
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+        <MenuItem icon="analytics-outline" label={t.viewAnalytics}
+          onPress={() => navigation.navigate('Analytics')} rightContent={null} />
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+        <MenuItem icon="lock-closed-outline" label={t.changePassword}
+          onPress={() => navigation.navigate('ChangePassword')} rightContent={null} />
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+       <MenuItem
+            icon="trash-outline"
+            label={t.deleteAccount}
+            onPress={() => navigation.navigate('DeleteAccount')}
+            rightContent={null}
+          />
       </View>
 
       {/* Preferences */}
-      <Text style={styles.sectionTitle}>PREFERENCES</Text>
-      <View style={styles.section}>
-        <MenuItem icon="notifications-outline" label="Notifications" onPress={() => {}} />
-        <View style={styles.divider} />
-        <MenuItem icon="globe-outline" label="Language" rightText="English" onPress={() => {}} />
+      <Text style={[styles.sectionTitle, { color: colors.muted }]}>{t.preferences}</Text>
+      <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
+
+        <View style={styles.menuItem}>
+          <View style={styles.menuLeft}>
+            <View style={[styles.iconBox, { backgroundColor: colors.warmBg }]}>
+              <Ionicons name={isDark ? 'moon' : 'sunny-outline'} size={18} color={colors.saffron} />
+            </View>
+            <Text style={[styles.menuLabel, { color: colors.darkText }]}>{t.darkMode}</Text>
+          </View>
+          <Switch
+            value={isDark}
+            onValueChange={toggleTheme}
+            trackColor={{ false: colors.border, true: colors.saffron }}
+            thumbColor={colors.white}
+          />
+        </View>
+
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+        <View style={styles.menuItem}>
+          <View style={styles.menuLeft}>
+            <View style={[styles.iconBox, { backgroundColor: colors.warmBg }]}>
+              <Ionicons name="notifications-outline" size={18} color={colors.saffron} />
+            </View>
+            <Text style={[styles.menuLabel, { color: colors.darkText }]}>{t.notifications}</Text>
+          </View>
+          <Switch
+            value={notificationsEnabled}
+            onValueChange={setNotificationsEnabled}
+            trackColor={{ false: colors.border, true: colors.saffron }}
+            thumbColor={colors.white}
+          />
+        </View>
+
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+        <TouchableOpacity style={styles.menuItem} onPress={() => setShowLanguageModal(true)}>
+          <View style={styles.menuLeft}>
+            <View style={[styles.iconBox, { backgroundColor: colors.warmBg }]}>
+              <Ionicons name="globe-outline" size={18} color={colors.saffron} />
+            </View>
+            <Text style={[styles.menuLabel, { color: colors.darkText }]}>{t.language}</Text>
+          </View>
+          <View style={styles.menuRight}>
+            <Text style={[styles.menuRightText, { color: colors.muted }]}>{language}</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+          </View>
+        </TouchableOpacity>
+
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+        <TouchableOpacity style={styles.menuItem} onPress={() => setShowThemeModal(true)}>
+          <View style={styles.menuLeft}>
+            <View style={[styles.iconBox, { backgroundColor: colors.warmBg }]}>
+              <Ionicons name="color-palette-outline" size={18} color={colors.saffron} />
+            </View>
+            <Text style={[styles.menuLabel, { color: colors.darkText }]}>{t.chatTheme}</Text>
+          </View>
+          <View style={styles.menuRight}>
+            {customBg ? (
+              <Image source={{ uri: customBg }} style={styles.themePreviewImg} />
+            ) : (
+              <View style={[styles.themePreviewDot, {
+                backgroundColor: CHAT_THEMES.find(x => x.id === selectedChatTheme)?.bg || '#F0EBE3',
+                borderColor: colors.border,
+              }]} />
+            )}
+            <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+          </View>
+        </TouchableOpacity>
+
       </View>
 
       {/* Support */}
-      <Text style={styles.sectionTitle}>SUPPORT</Text>
-      <View style={styles.section}>
-        <MenuItem icon="help-circle-outline" label="Help Center" onPress={() => {}} />
-        <View style={styles.divider} />
-        <MenuItem icon="shield-outline" label="Privacy Policy" onPress={() => {}} />
+      <Text style={[styles.sectionTitle, { color: colors.muted }]}>{t.support}</Text>
+      <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <MenuItem icon="help-circle-outline" label={t.helpCenter}
+          onPress={() => navigation.navigate('HelpCenter')} rightContent={null} />
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+        <MenuItem icon="shield-outline" label={t.privacyPolicy}
+          onPress={() => navigation.navigate('PrivacyPolicy')} rightContent={null} />
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+        <MenuItem icon="information-circle-outline" label={t.aboutFolkChat}
+          onPress={() => navigation.navigate('About')} rightContent={null} />
       </View>
 
       {/* Logout */}
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+      <TouchableOpacity
+        style={[styles.logoutBtn, { backgroundColor: colors.card }]}
+        onPress={handleLogout}>
         <Ionicons name="log-out-outline" size={20} color="#FF4444" />
-        <Text style={styles.logoutText}>Logout </Text>
+        <Text style={styles.logoutText}>{t.logout}</Text>
       </TouchableOpacity>
 
-      <View style={{ height: 40 }} />
+      {/* Language Modal */}
+      <Modal visible={showLanguageModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { backgroundColor: colors.card }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.darkText }]}>{t.language}</Text>
+              <TouchableOpacity onPress={() => setShowLanguageModal(false)}>
+                <Ionicons name="close" size={24} color={colors.darkText} />
+              </TouchableOpacity>
+            </View>
+            {LANGUAGES.map(lang => (
+              <TouchableOpacity
+                key={lang}
+                style={[styles.optionItem, { borderBottomColor: colors.border }]}
+                onPress={() => { setLanguage(lang); setShowLanguageModal(false); }}>
+                <View style={styles.optionLeft}>
+                  <Ionicons name="globe-outline" size={22}
+                    color={language === lang ? colors.saffron : colors.muted} />
+                  <View>
+                    <Text style={[
+                      styles.optionLabel,
+                      { color: language === lang ? colors.saffron : colors.darkText },
+                      language === lang && { fontWeight: '700' },
+                    ]}>
+                      {lang}
+                    </Text>
+                    {lang === 'Sinhala' && <Text style={[styles.optionSub, { color: colors.muted }]}>සිංහල</Text>}
+                    {lang === 'Tamil' && <Text style={[styles.optionSub, { color: colors.muted }]}>தமிழ்</Text>}
+                  </View>
+                </View>
+                {language === lang && (
+                  <Ionicons name="checkmark-circle" size={22} color={colors.saffron} />
+                )}
+              </TouchableOpacity>
+            ))}
+            <View style={{ height: 30 }} />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Chat Theme Modal */}
+      <Modal visible={showThemeModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { backgroundColor: colors.card }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.darkText }]}>{t.chatTheme}</Text>
+              <TouchableOpacity onPress={() => setShowThemeModal(false)}>
+                <Ionicons name="close" size={24} color={colors.darkText} />
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.subLabel, { color: colors.muted }]}>Color Themes</Text>
+            <View style={styles.themeGrid}>
+              {CHAT_THEMES.map(theme => (
+                <TouchableOpacity
+                  key={theme.id}
+                  style={styles.themeItem}
+                  onPress={() => { setSelectedChatTheme(theme.id); setCustomBg(null); setShowThemeModal(false); }}>
+                  <View style={[
+                    styles.themeCircle,
+                    { backgroundColor: theme.bg, borderColor: colors.border },
+                    selectedChatTheme === theme.id && { borderColor: colors.saffron, borderWidth: 3 },
+                  ]}>
+                    {selectedChatTheme === theme.id && (
+                      <Ionicons name="checkmark" size={20} color={theme.id === 'dark' ? '#fff' : '#333'} />
+                    )}
+                  </View>
+                  <Text style={[styles.themeLabel, { color: selectedChatTheme === theme.id ? colors.saffron : colors.muted }]}>
+                    {theme.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={[styles.subLabel, { color: colors.muted }]}>Custom Wallpaper</Text>
+            <TouchableOpacity style={[styles.customBgBtn, { borderColor: colors.border }]} onPress={pickCustomBg}>
+              {customBg ? (
+                <Image source={{ uri: customBg }} style={styles.customBgPreview} />
+              ) : (
+                <View style={[styles.customBgPlaceholder, { backgroundColor: colors.warmBg }]}>
+                  <Ionicons name="image-outline" size={28} color={colors.saffron} />
+                  <Text style={[styles.customBgText, { color: colors.saffron }]}>Choose from Gallery</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <View style={{ height: 30 }} />
+          </View>
+        </View>
+      </Modal>
+
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.offwhite },
-  title: { fontSize: 28, fontWeight: 'bold', color: COLORS.darkText, padding: 24, paddingBottom: 16 },
-  profileCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    backgroundColor: COLORS.white, marginHorizontal: 16,
-    borderRadius: 16, padding: 16, marginBottom: 24,
-    borderWidth: 0.5, borderColor: COLORS.border,
-  },
-  avatarCircle: {
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: COLORS.warmBg, justifyContent: 'center', alignItems: 'center',
-    borderWidth: 2, borderColor: COLORS.saffron,
-  },
-  profileName: { fontSize: 16, fontWeight: 'bold', color: COLORS.darkText },
-  profileCategory: { fontSize: 13, color: COLORS.muted, marginTop: 2 },
-  sectionTitle: {
-    fontSize: 11, fontWeight: '700', color: COLORS.muted,
-    letterSpacing: 1, marginHorizontal: 24, marginBottom: 8,
-  },
-  section: {
-    backgroundColor: COLORS.white, marginHorizontal: 16,
-    borderRadius: 16, marginBottom: 24,
-    borderWidth: 0.5, borderColor: COLORS.border,
-  },
-  menuItem: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', padding: 16,
-  },
+  container: { flex: 1 },
+  title: { fontSize: 28, fontWeight: 'bold', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 20 },
+  profileCard: { flexDirection: 'row', alignItems: 'center', gap: 14, marginHorizontal: 16, borderRadius: 16, padding: 16, marginBottom: 24, borderWidth: 0.5 },
+  profileAvatar: { width: 60, height: 60, borderRadius: 30, borderWidth: 2 },
+  avatarCircle: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', borderWidth: 2 },
+  profileName: { fontSize: 16, fontWeight: 'bold' },
+  profileSub: { fontSize: 13, fontWeight: '500', marginTop: 2 },
+  profileEmail: { fontSize: 12, marginTop: 2 },
+  sectionTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 1, marginHorizontal: 24, marginBottom: 8 },
+  section: { marginHorizontal: 16, borderRadius: 16, marginBottom: 24, borderWidth: 0.5 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
   menuLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  iconBox: { width: 34, height: 34, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  iconBox: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   menuLabel: { fontSize: 15, fontWeight: '500' },
-  menuRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  menuRightText: { fontSize: 13, color: COLORS.muted },
-  divider: { height: 0.5, backgroundColor: COLORS.border, marginLeft: 62 },
-  logoutBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 10, backgroundColor: COLORS.white, marginHorizontal: 16,
-    borderRadius: 16, padding: 16, borderWidth: 0.5, borderColor: '#FFCCCC',
-  },
+  menuRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  menuRightText: { fontSize: 13 },
+  divider: { height: 0.5, marginLeft: 64 },
+  themePreviewDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 1 },
+  themePreviewImg: { width: 22, height: 22, borderRadius: 11 },
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginHorizontal: 16, borderRadius: 16, padding: 16, borderWidth: 0.5, borderColor: '#FFCCCC' },
   logoutText: { fontSize: 16, fontWeight: '600', color: '#FF4444' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 20 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 0.5 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold' },
+  optionItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 18, borderBottomWidth: 0.5 },
+  optionLeft: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  optionLabel: { fontSize: 16 },
+  optionSub: { fontSize: 13, marginTop: 2 },
+  subLabel: { fontSize: 13, fontWeight: '600', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 10 },
+  themeGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, gap: 12 },
+  themeItem: { alignItems: 'center', width: 80 },
+  themeCircle: { width: 56, height: 56, borderRadius: 28, borderWidth: 2, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
+  themeLabel: { fontSize: 11, textAlign: 'center' },
+  customBgBtn: { marginHorizontal: 20, borderRadius: 16, overflow: 'hidden', height: 100, borderWidth: 1 },
+  customBgPreview: { width: '100%', height: '100%' },
+  customBgPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 6 },
+  customBgText: { fontSize: 14, fontWeight: '500' },
 });
