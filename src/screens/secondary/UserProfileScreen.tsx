@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Image, Dimensions, RefreshControl, Modal,
+  ScrollView, Image, Dimensions, RefreshControl, Modal, Alert,
 } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import firestore from '@react-native-firebase/firestore';
@@ -27,6 +27,7 @@ export default function UserProfileScreen({ navigation, route }: any) {
   const [isFollowing, setIsFollowing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedPost, setSelectedPost] = useState<any>(null);
+  const [postMenuPost, setPostMenuPost] = useState<any>(null);
 
   const isVideoUrl = (url: string) =>
     url?.includes('/video/upload/') || url?.endsWith('.mp4');
@@ -39,7 +40,6 @@ export default function UserProfileScreen({ navigation, route }: any) {
         setProfile(data);
         setIsFollowing(data?.followers?.includes(user?.uid) || false);
       }
-
       const postsSnap = await firestore().collection('posts').where('userId', '==', userId).get();
       const postsList = postsSnap.docs
         .map(d => ({ id: d.id, ...d.data() }))
@@ -49,7 +49,6 @@ export default function UserProfileScreen({ navigation, route }: any) {
           return bTime - aTime;
         });
       setPosts(postsList);
-
       if (isOwnProfile) {
         const savedSnap = await firestore().collection('posts').where('bookmarks', 'array-contains', userId).get();
         setSavedPosts(savedSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -58,7 +57,6 @@ export default function UserProfileScreen({ navigation, route }: any) {
   };
 
   useEffect(() => { loadData(); }, [userId]);
-
   const onRefresh = async () => { setRefreshing(true); await loadData(); setRefreshing(false); };
 
   const handleFollow = async () => {
@@ -75,15 +73,49 @@ export default function UserProfileScreen({ navigation, route }: any) {
       await targetRef.update({ followers: firestore.FieldValue.arrayUnion(user.uid) });
       setIsFollowing(true);
       setProfile((prev: any) => ({ ...prev, followers: [...(prev.followers || []), user.uid] }));
+      // follow notification
+      await firestore().collection('notifications').add({
+        toUserId: userId, fromUserId: user.uid,
+        fromUserName: profile?.name || 'Someone', fromUserAvatar: profile?.avatarUrl || '',
+        type: 'follow', message: `${profile?.name || 'Someone'} started following you`,
+        read: false, createdAt: firestore.FieldValue.serverTimestamp(),
+      }).catch(() => { });
     }
   };
 
-  const handleMessage = () => {
-    navigation.navigate('Chat', { userId, userName: profile?.name || 'Artist', userAvatar: profile?.avatarUrl || '' });
+  // delete post
+  const handleDeletePost = (post: any) => {
+    Alert.alert(
+      'Delete Post',
+      'This will permanently delete your post and all its comments.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive',
+          onPress: async () => {
+            try {
+              await firestore().collection('posts').doc(post.id).delete();
+              setPosts(prev => prev.filter(p => p.id !== post.id));
+              setSavedPosts(prev => prev.filter(p => p.id !== post.id));
+              setPostMenuPost(null);
+              setSelectedPost(null);
+            } catch (e) {
+              Alert.alert('Error', 'Failed to delete post');
+            }
+          },
+        },
+      ]
+    );
   };
 
+  //grid item
   const renderGridItem = (post: any) => (
-    <TouchableOpacity key={post.id} style={styles.gridItem} onPress={() => setSelectedPost(post)}>
+    <TouchableOpacity
+      key={post.id}
+      style={styles.gridItem}
+      onPress={() => setSelectedPost(post)}
+      onLongPress={() => isOwnProfile && setPostMenuPost(post)}
+      activeOpacity={0.85}>
       {isVideoUrl(post.imageUrl) ? (
         <View style={styles.videoGridItem}>
           <Ionicons name="play-circle" size={32} color="#fff" />
@@ -102,6 +134,14 @@ export default function UserProfileScreen({ navigation, route }: any) {
           <Ionicons name="videocam" size={12} color="#fff" />
         </View>
       )}
+      {/* own post indicator */}
+      {isOwnProfile && (
+        <TouchableOpacity
+          style={styles.gridMenuBtn}
+          onPress={() => setPostMenuPost(post)}>
+          <Ionicons name="ellipsis-vertical" size={14} color="#fff" />
+        </TouchableOpacity>
+      )}
     </TouchableOpacity>
   );
 
@@ -111,7 +151,7 @@ export default function UserProfileScreen({ navigation, route }: any) {
       showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.saffron]} />}>
 
-      {/* header */}
+      {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.header }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={colors.darkText} />
@@ -128,27 +168,24 @@ export default function UserProfileScreen({ navigation, route }: any) {
         )}
       </View>
 
-      {/* cover */}
+      {/* Cover */}
       <View style={styles.cover}>
-        {profile?.coverUrl ? (
-          <Image source={{ uri: profile.coverUrl }} style={styles.coverImg} />
-        ) : (
-          <View style={[styles.coverImg, { backgroundColor: colors.warmBg }]} />
-        )}
+        {profile?.coverUrl
+          ? <Image source={{ uri: profile.coverUrl }} style={styles.coverImg} />
+          : <View style={[styles.coverImg, { backgroundColor: colors.warmBg }]} />
+        }
       </View>
 
-      {/* Profile info */}
+      {/* Profile Info */}
       <View style={[styles.profileSection, { backgroundColor: colors.card }]}>
         <View style={styles.avatarWrapper}>
-          {profile?.avatarUrl ? (
-            <Image source={{ uri: profile.avatarUrl }} style={[styles.avatar, { borderColor: colors.card }]} />
-          ) : (
-            <View style={[styles.avatarPlaceholder, { backgroundColor: colors.warmBg, borderColor: colors.card }]}>
-              <Ionicons name="person" size={36} color={colors.saffron} />
-            </View>
-          )}
+          {profile?.avatarUrl
+            ? <Image source={{ uri: profile.avatarUrl }} style={[styles.avatar, { borderColor: colors.card }]} />
+            : <View style={[styles.avatarPlaceholder, { backgroundColor: colors.warmBg, borderColor: colors.card }]}>
+                <Ionicons name="person" size={36} color={colors.saffron} />
+              </View>
+          }
         </View>
-
         <Text style={[styles.name, { color: colors.darkText }]}>{profile?.name || 'Artist Name'}</Text>
         <Text style={[styles.category, { color: colors.saffron }]}>{profile?.artistCategory || 'Folk Artist'}</Text>
         {profile?.bio ? <Text style={[styles.bio, { color: colors.muted }]}>{profile.bio}</Text> : null}
@@ -160,22 +197,20 @@ export default function UserProfileScreen({ navigation, route }: any) {
             <Text style={[styles.statLabel, { color: colors.muted }]}>{t.posts}</Text>
           </View>
           <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <TouchableOpacity
-            style={styles.statItem}
+          <TouchableOpacity style={styles.statItem}
             onPress={() => navigation.navigate('FollowList', { userId, type: 'followers', list: profile?.followers || [] })}>
             <Text style={[styles.statNum, { color: colors.darkText }]}>{profile?.followers?.length || 0}</Text>
             <Text style={[styles.statLabel, { color: colors.muted }]}>{t.followers}</Text>
           </TouchableOpacity>
           <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
-          <TouchableOpacity
-            style={styles.statItem}
+          <TouchableOpacity style={styles.statItem}
             onPress={() => navigation.navigate('FollowList', { userId, type: 'following', list: profile?.following || [] })}>
             <Text style={[styles.statNum, { color: colors.darkText }]}>{profile?.following?.length || 0}</Text>
             <Text style={[styles.statLabel, { color: colors.muted }]}>{t.following}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Buttons */}
+        {/* Action buttons */}
         {isOwnProfile ? (
           <View style={styles.actionButtons}>
             <TouchableOpacity style={[styles.editBtn, { backgroundColor: colors.saffron }]}
@@ -198,7 +233,8 @@ export default function UserProfileScreen({ navigation, route }: any) {
                 {isFollowing ? t.following_btn : t.follow}
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.messageBtn, { borderColor: colors.saffron }]} onPress={handleMessage}>
+            <TouchableOpacity style={[styles.messageBtn, { borderColor: colors.saffron }]}
+              onPress={() => navigation.navigate('Chat', { userId, userName: profile?.name || 'Artist', userAvatar: profile?.avatarUrl || '' })}>
               <Ionicons name="chatbubble-outline" size={16} color={colors.saffron} />
               <Text style={[styles.messageBtnText, { color: colors.saffron }]}>{t.message}</Text>
             </TouchableOpacity>
@@ -206,7 +242,7 @@ export default function UserProfileScreen({ navigation, route }: any) {
         )}
       </View>
 
-      {/* tabs */}
+      {/* Tabs */}
       <View style={[styles.tabs, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'posts' && [styles.tabActive, { borderBottomColor: colors.saffron }]]}
@@ -222,10 +258,15 @@ export default function UserProfileScreen({ navigation, route }: any) {
         )}
       </View>
 
-      {/* posts Grid */}
+      {/* Posts grid */}
       {activeTab === 'posts' && (
         posts.length > 0 ? (
-          <View style={styles.grid}>{posts.map(post => renderGridItem(post))}</View>
+          <>
+            {isOwnProfile && (
+              <Text style={[styles.gridHint, { color: colors.muted }]}>Tap ⋮ on a post to edit or delete</Text>
+            )}
+            <View style={styles.grid}>{posts.map(post => renderGridItem(post))}</View>
+          </>
         ) : (
           <View style={styles.emptyState}>
             <Ionicons name="camera-outline" size={48} color={colors.muted} />
@@ -247,7 +288,7 @@ export default function UserProfileScreen({ navigation, route }: any) {
 
       <View style={{ height: 40 }} />
 
-      {/* post Preview Modal */}
+      {/* post preview */}
       <Modal visible={selectedPost !== null} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { backgroundColor: colors.card }]}>
@@ -255,13 +296,23 @@ export default function UserProfileScreen({ navigation, route }: any) {
               <Text style={[styles.modalTitle, { color: colors.darkText }]} numberOfLines={1}>
                 {selectedPost?.title || 'Post'}
               </Text>
-              <TouchableOpacity onPress={() => setSelectedPost(null)}>
-                <Ionicons name="close" size={24} color={colors.darkText} />
-              </TouchableOpacity>
+              <View style={styles.modalHeaderRight}>
+                {/* Edit/Delete button inside preview(own posts only) */}
+                {isOwnProfile && selectedPost && (
+                  <TouchableOpacity
+                    style={[styles.modalMenuBtn, { backgroundColor: colors.offwhite }]}
+                    onPress={() => { setPostMenuPost(selectedPost); setSelectedPost(null); }}>
+                    <Ionicons name="ellipsis-horizontal" size={18} color={colors.darkText} />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => setSelectedPost(null)}>
+                  <Ionicons name="close" size={24} color={colors.darkText} />
+                </TouchableOpacity>
+              </View>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
               {selectedPost && isVideoUrl(selectedPost.imageUrl) ? (
-                <Video source={{ uri: selectedPost.imageUrl }} style={styles.modalMedia} resizeMode="contain" controls={true} paused={true} />
+                <Video source={{ uri: selectedPost.imageUrl }} style={styles.modalMedia} resizeMode="contain" controls paused />
               ) : selectedPost?.imageUrl ? (
                 <Image source={{ uri: selectedPost.imageUrl }} style={styles.modalMedia} resizeMode="contain" />
               ) : null}
@@ -286,15 +337,98 @@ export default function UserProfileScreen({ navigation, route }: any) {
                     <Ionicons name="bookmark" size={16} color={colors.saffron} />
                     <Text style={[styles.modalStatText, { color: colors.muted }]}>{selectedPost?.bookmarks?.length || 0} saves</Text>
                   </View>
+                  {selectedPost?.viewCount > 0 && (
+                    <View style={styles.modalStatItem}>
+                      <Ionicons name="eye-outline" size={16} color={colors.muted} />
+                      <Text style={[styles.modalStatText, { color: colors.muted }]}>{selectedPost.viewCount} views</Text>
+                    </View>
+                  )}
                 </View>
               </View>
             </ScrollView>
           </View>
         </View>
       </Modal>
+
+      {/* post mangement */}
+      <Modal visible={postMenuPost !== null} animationType="slide" transparent>
+        <Pressable style={styles.menuOverlay} onPress={() => setPostMenuPost(null)}>
+          <Pressable style={[styles.menuSheet, { backgroundColor: colors.card }]}>
+            {/* Post preview thumbnail */}
+            {postMenuPost?.imageUrl && (
+              <View style={[styles.menuPostPreview, { borderBottomColor: colors.border }]}>
+                <Image source={{ uri: postMenuPost.imageUrl }} style={styles.menuPostThumb} resizeMode="cover" />
+                <View style={styles.menuPostInfo}>
+                  <Text style={[styles.menuPostTitle, { color: colors.darkText }]} numberOfLines={1}>
+                    {postMenuPost?.title || 'Post'}
+                  </Text>
+                  <Text style={[styles.menuPostMeta, { color: colors.muted }]}>
+                    {postMenuPost?.likes?.length || 0} likes · {postMenuPost?.commentCount || 0} comments
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            <View style={styles.menuHandle} />
+            <Text style={[styles.menuTitle, { color: colors.darkText }]}>Manage Post</Text>
+
+            {/* View post */}
+            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: colors.border }]}
+              onPress={() => { setSelectedPost(postMenuPost); setPostMenuPost(null); }}>
+              <View style={[styles.menuItemIcon, { backgroundColor: '#E8F5F3' }]}>
+                <Ionicons name="eye-outline" size={20} color="#1A6B5C" />
+              </View>
+              <View style={styles.menuItemText}>
+                <Text style={[styles.menuItemTitle, { color: colors.darkText }]}>View Post</Text>
+                <Text style={[styles.menuItemSub, { color: colors.muted }]}>See full post details</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+            </TouchableOpacity>
+
+            {/* Share */}
+            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: colors.border }]}
+              onPress={async () => {
+                setPostMenuPost(null);
+                try {
+                  const { Share } = require('react-native');
+                  await Share.share({ title: postMenuPost?.title || 'FolkChat', message: `${postMenuPost?.title || 'Folk art'}\n\nShared from FolkChat` });
+                } catch { }
+              }}>
+              <View style={[styles.menuItemIcon, { backgroundColor: '#E8F0FE' }]}>
+                <Ionicons name="paper-plane-outline" size={20} color="#1A4D8B" />
+              </View>
+              <View style={styles.menuItemText}>
+                <Text style={[styles.menuItemTitle, { color: colors.darkText }]}>Share Post</Text>
+                <Text style={[styles.menuItemSub, { color: colors.muted }]}>Share with others</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+            </TouchableOpacity>
+
+            {/* Delete */}
+            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: 'transparent' }]}
+              onPress={() => handleDeletePost(postMenuPost)}>
+              <View style={[styles.menuItemIcon, { backgroundColor: '#FEE8E8' }]}>
+                <Ionicons name="trash-outline" size={20} color="#FF4444" />
+              </View>
+              <View style={styles.menuItemText}>
+                <Text style={[styles.menuItemTitle, { color: '#FF4444' }]}>Delete Post</Text>
+                <Text style={[styles.menuItemSub, { color: colors.muted }]}>Permanently remove this post</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#FF4444" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.menuCancelBtn, { backgroundColor: colors.offwhite }]}
+              onPress={() => setPostMenuPost(null)}>
+              <Text style={[styles.menuCancelTxt, { color: colors.darkText }]}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
+
+import { Pressable } from 'react-native';
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -326,6 +460,7 @@ const styles = StyleSheet.create({
   tabs: { flexDirection: 'row', borderBottomWidth: 0.5 },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 14 },
   tabActive: { borderBottomWidth: 2 },
+  gridHint: { fontSize: 11, textAlign: 'center', paddingVertical: 6 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 2, padding: 2 },
   gridItem: { width: GRID_SIZE, height: GRID_SIZE, position: 'relative' },
   gridImg: { width: '100%', height: '100%' },
@@ -333,13 +468,14 @@ const styles = StyleSheet.create({
   videoGridBadge: { position: 'absolute', top: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 10, padding: 4 },
   gridLikes: { position: 'absolute', bottom: 6, left: 6, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
   gridLikesText: { fontSize: 11, color: '#fff', fontWeight: '600' },
+  gridMenuBtn: { position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 10, padding: 4 },
   emptyState: { alignItems: 'center', paddingVertical: 60, gap: 12 },
   emptyText: { fontSize: 15 },
-  uploadBtn: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10, marginTop: 4 },
-  uploadBtnText: { color: '#fff', fontWeight: '600' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '90%' },
+  modalSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 0.5 },
+  modalHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  modalMenuBtn: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
   modalTitle: { fontSize: 16, fontWeight: 'bold', flex: 1 },
   modalMedia: { width, height: width, backgroundColor: '#000' },
   modalInfo: { padding: 20 },
@@ -347,7 +483,23 @@ const styles = StyleSheet.create({
   modalCaption: { fontSize: 14, lineHeight: 20, marginBottom: 12 },
   modalCategoryTag: { alignSelf: 'flex-start', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, marginBottom: 16 },
   modalCategoryText: { fontSize: 13, fontWeight: '600' },
-  modalStats: { flexDirection: 'row', gap: 20, paddingTop: 16, borderTopWidth: 0.5 },
+  modalStats: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, paddingTop: 16, borderTopWidth: 0.5 },
   modalStatItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   modalStatText: { fontSize: 13 },
+  menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  menuSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 30 },
+  menuHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: '#ccc', alignSelf: 'center', marginTop: 12, marginBottom: 4 },
+  menuPostPreview: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderBottomWidth: 0.5 },
+  menuPostThumb: { width: 56, height: 56, borderRadius: 10 },
+  menuPostInfo: { flex: 1 },
+  menuPostTitle: { fontSize: 14, fontWeight: '700' },
+  menuPostMeta: { fontSize: 12, marginTop: 2 },
+  menuTitle: { fontSize: 16, fontWeight: '700', paddingHorizontal: 20, paddingVertical: 12 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 0.5 },
+  menuItemIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  menuItemText: { flex: 1 },
+  menuItemTitle: { fontSize: 15, fontWeight: '600' },
+  menuItemSub: { fontSize: 12, marginTop: 2 },
+  menuCancelBtn: { margin: 16, padding: 14, borderRadius: 14, alignItems: 'center' },
+  menuCancelTxt: { fontSize: 15, fontWeight: '600' },
 });

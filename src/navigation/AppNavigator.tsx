@@ -21,6 +21,7 @@ const HelpCenterScreen = require('../screens/secondary/HelpCenterScreen').defaul
 const PrivacyPolicyScreen = require('../screens/secondary/PrivacyPolicyScreen').default;
 const AboutScreen = require('../screens/secondary/AboutScreen').default;
 const DeleteAccountScreen = require('../screens/secondary/DeleteAccountScreen').default;
+const EventDetailScreen = require('../screens/secondary/EventDetailScreen').default;
 
 export default function AppNavigator() {
   const { user } = useAuthStore();
@@ -60,6 +61,7 @@ export default function AppNavigator() {
             <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
             <Stack.Screen name="About" component={AboutScreen} />
             <Stack.Screen name="DeleteAccount" component={DeleteAccountScreen} />
+            <Stack.Screen name="EventDetail" component={EventDetailScreen} />
           </>
         ) : (
           <>
