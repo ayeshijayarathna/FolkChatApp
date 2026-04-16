@@ -10,23 +10,26 @@ import { useAuthStore } from '../../store/authStore';
 
 interface Notification {
   id: string;
-  type: 'like' | 'comment' | 'reply' | 'follow' | 'view_milestone';
+  type: string;
   fromUserId: string;
   fromUserName: string;
   fromUserAvatar: string;
   message: string;
   postImage?: string;
   postId?: string;
+  chatId?: string;
   read: boolean;
   createdAt: any;
 }
 
 const TYPE_ICON: Record<string, { name: string; color: string }> = {
-  like:           { name: 'heart',             color: '#FF4444' },
-  comment:        { name: 'chatbubble',         color: '#4A90E2' },
-  reply:          { name: 'return-down-forward',color: '#7B61FF' },
-  follow:         { name: 'person-add',         color: '#27AE60' },
-  view_milestone: { name: 'trending-up',        color: '#E07830' },
+  like:           { name: 'heart',              color: '#FF4444' },
+  comment:        { name: 'chatbubble',          color: '#4A90E2' },
+  reply:          { name: 'return-down-forward', color: '#7B61FF' },
+  follow:         { name: 'person-add',          color: '#27AE60' },
+  view_milestone: { name: 'trending-up',         color: '#E07830' },
+  message:        { name: 'chatbubble-ellipses', color: '#D4651A' },
+  interested:     { name: 'star',                color: '#B8860B' },
 };
 
 function timeAgo(timestamp: any): string {
@@ -66,7 +69,11 @@ export default function NotificationsScreen({ navigation }: any) {
 
   useEffect(() => { fetchNotifications(); }, []);
 
-  const onRefresh = async () => { setRefreshing(true); await fetchNotifications(); setRefreshing(false); };
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchNotifications();
+    setRefreshing(false);
+  };
 
   const markAllRead = async () => {
     if (!user?.uid) return;
@@ -80,24 +87,40 @@ export default function NotificationsScreen({ navigation }: any) {
   };
 
   const handleNotifPress = async (notif: Notification) => {
-    // mark as read
     if (!notif.read) {
       setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
-      try { await firestore().collection('notifications').doc(notif.id).update({ read: true }); } catch { }
+      try {
+        await firestore().collection('notifications').doc(notif.id).update({ read: true });
+      } catch { }
     }
-    // navigate
-    if ((notif.type === 'like' || notif.type === 'comment' || notif.type === 'reply' || notif.type === 'view_milestone') && notif.postId) {
-      // navigate to the post owner's profile 
-      navigation.navigate('UserProfile', { userId: notif.fromUserId });
-    } else if (notif.type === 'follow') {
-      navigation.navigate('UserProfile', { userId: notif.fromUserId });
+
+    switch (notif.type) {
+      case 'message':
+        if (notif.chatId) {
+          navigation.navigate('Chat', {
+            chatId: notif.chatId,
+            userId: notif.fromUserId,
+            userName: notif.fromUserName,
+            userAvatar: notif.fromUserAvatar,
+          });
+        }
+        break;
+      case 'like':
+      case 'comment':
+      case 'reply':
+      case 'view_milestone':
+      case 'follow':
+      case 'interested':
+      default:
+        navigation.navigate('UserProfile', { userId: notif.fromUserId });
+        break;
     }
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const renderItem = ({ item }: { item: Notification }) => {
-    const icon = TYPE_ICON[item.type] || { name: 'notifications', color: '#999' };
+    const icon = TYPE_ICON[item.type] || { name: 'notifications-outline', color: '#999' };
     return (
       <TouchableOpacity
         style={[
@@ -160,11 +183,13 @@ export default function NotificationsScreen({ navigation }: any) {
         )}
       </View>
 
-      {/* Unread badge */}
+      {/* Unread banner */}
       {unreadCount > 0 && (
         <View style={[styles.unreadBanner, { backgroundColor: colors.saffron }]}>
           <Ionicons name="notifications" size={14} color="#fff" />
-          <Text style={styles.unreadBannerText}>{unreadCount} new notification{unreadCount > 1 ? 's' : ''}</Text>
+          <Text style={styles.unreadBannerText}>
+            {unreadCount} new notification{unreadCount > 1 ? 's' : ''}
+          </Text>
         </View>
       )}
 
@@ -177,7 +202,9 @@ export default function NotificationsScreen({ navigation }: any) {
           data={notifications}
           keyExtractor={item => item.id}
           renderItem={renderItem}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.saffron]} />}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.saffron]} />
+          }
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyState}>

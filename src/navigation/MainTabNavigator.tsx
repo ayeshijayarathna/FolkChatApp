@@ -1,21 +1,40 @@
-import React from 'react';
-import { Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { MainTabParamList } from './types';
 import Ionicons from '@react-native-vector-icons/ionicons';
+import firestore from '@react-native-firebase/firestore';
 import { useTheme } from '../context/ThemeContext';
 import { useLang } from '../context/LanguageContext';
+import { useAuthStore } from '../store/authStore';
 import HomeFeedScreen from '../screens/main/HomeFeedScreen';
 import SearchScreen from '../screens/main/SearchScreen';
 import UploadScreen from '../screens/main/UploadScreen';
 import MessagesScreen from '../screens/main/MessagesScreen';
 import SettingsScreen from '../screens/main/SettingsScreen';
 
-const Tab = createBottomTabNavigator<MainTabParamList>();
+const Tab = createBottomTabNavigator();
 
 export default function MainTabNavigator() {
   const { colors } = useTheme();
   const { t } = useLang();
+  const { user } = useAuthStore();
+  const [totalUnread, setTotalUnread] = useState(0);
+
+  // Real time total unread message count
+  useEffect(() => {
+    if (!user?.uid) return;
+    const unsub = firestore()
+      .collection('chats')
+      .where('participants', 'array-contains', user.uid)
+      .onSnapshot(snap => {
+        let count = 0;
+        snap.docs.forEach(doc => {
+          count += doc.data().unreadCount?.[user.uid] || 0;
+        });
+        setTotalUnread(count);
+      }, () => { });
+    return () => unsub();
+  }, [user]);
 
   return (
     <Tab.Navigator
@@ -35,37 +54,27 @@ export default function MainTabNavigator() {
           if (route.name === 'Search')
             return <Ionicons name={focused ? 'search' : 'search-outline'} size={size} color={color} />;
           if (route.name === 'Upload')
+            return <Ionicons name="add-circle" size={36} color={colors.saffron} />;
+          if (route.name === 'Messages')
             return (
-              <View style={{
-                width: 46, height: 46, borderRadius: 23,
-                backgroundColor: colors.saffron,
-                justifyContent: 'center', alignItems: 'center',
-                marginBottom: 4,
-                elevation: 4,
-                shadowColor: colors.saffron,
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.4,
-                shadowRadius: 4,
-              }}>
-                <Ionicons name="add" size={28} color="#fff" />
+              <View style={{ position: 'relative' }}>
+                <Ionicons name={focused ? 'chatbubble' : 'chatbubble-outline'} size={size} color={color} />
+                {totalUnread > 0 && (
+                  <View style={[badgeStyles.badge, { backgroundColor: colors.saffron }]}>
+                    <Text style={badgeStyles.badgeTxt}>{totalUnread > 9 ? '9+' : totalUnread}</Text>
+                  </View>
+                )}
               </View>
             );
-          if (route.name === 'Messages')
-            return <Ionicons name={focused ? 'chatbubble' : 'chatbubble-outline'} size={size} color={color} />;
           return <Ionicons name={focused ? 'settings' : 'settings-outline'} size={size} color={color} />;
         },
-        tabBarLabel: ({ color }) => {
+        tabBarLabel: ({ focused, color }) => {
+          const labels: Record<string, string> = {
+            Home: t.home, Search: t.search, Upload: '',
+            Messages: t.messages, Settings: t.settings_title,
+          };
           if (route.name === 'Upload') return null;
-          let label = '';
-          if (route.name === 'Home') label = t.home;
-          else if (route.name === 'Search') label = t.search;
-          else if (route.name === 'Messages') label = t.messages;
-          else if (route.name === 'Settings') label = t.settings_title;
-          return (
-            <Text style={{ color, fontSize: 10, marginTop: -2 }} numberOfLines={1}>
-              {label}
-            </Text>
-          );
+          return <Text style={{ color, fontSize: 10, marginTop: -4 }}>{labels[route.name] || route.name}</Text>;
         },
       })}>
       <Tab.Screen name="Home" component={HomeFeedScreen} />
@@ -76,3 +85,8 @@ export default function MainTabNavigator() {
     </Tab.Navigator>
   );
 }
+
+const badgeStyles = StyleSheet.create({
+  badge: { position: 'absolute', top: -4, right: -8, minWidth: 16, height: 16, borderRadius: 8, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
+  badgeTxt: { color: '#fff', fontSize: 9, fontWeight: 'bold' },
+});

@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, Image, Dimensions, RefreshControl, Modal, Alert,
+  ScrollView, Image, Dimensions, RefreshControl,
+  Modal, Alert, FlatList, Pressable,
 } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import firestore from '@react-native-firebase/firestore';
@@ -13,6 +14,85 @@ import { useAuthStore } from '../../store/authStore';
 const { width } = Dimensions.get('window');
 const GRID_SIZE = (width - 4) / 3;
 
+function initials(name: string) { return (name || 'A').charAt(0).toUpperCase(); }
+
+const isVideoUrl = (url: string) =>
+  url?.includes('/video/upload/') || url?.endsWith('.mp4') || url?.endsWith('.mov');
+
+//post media swiper for preview modal 
+function PostMediaSwiper({ post, colors }: { post: any; colors: any }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const flatRef = useRef<FlatList>(null);
+
+  const items: { url: string; type: 'image' | 'video' }[] =
+    post.mediaItems && post.mediaItems.length > 0
+      ? post.mediaItems
+      : [{ url: post.imageUrl, type: isVideoUrl(post.imageUrl) ? 'video' : 'image' }];
+
+  const goTo = (idx: number) => {
+    if (idx < 0 || idx >= items.length) return;
+    flatRef.current?.scrollToIndex({ index: idx, animated: true });
+    setActiveIndex(idx);
+  };
+
+  return (
+    <View style={{ position: 'relative' }}>
+      <FlatList
+        ref={flatRef}
+        data={items}
+        horizontal pagingEnabled showsHorizontalScrollIndicator={false}
+        keyExtractor={(_, i) => String(i)}
+        getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
+        onMomentumScrollEnd={e => setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / width))}
+        renderItem={({ item, index }) => (
+          item.type === 'video'
+            ? <Video source={{ uri: item.url }} style={{ width, height: width, backgroundColor: '#000' }} resizeMode="contain" controls paused={index !== activeIndex} />
+            : <Image source={{ uri: item.url }} style={{ width, height: width, backgroundColor: '#000' }} resizeMode="contain" />
+        )}
+      />
+
+      {/* Prev arrow */}
+      {activeIndex > 0 && (
+        <TouchableOpacity style={sw.arrowLeft} onPress={() => goTo(activeIndex - 1)}>
+          <View style={sw.arrowBg}><Ionicons name="chevron-back" size={18} color="#fff" /></View>
+        </TouchableOpacity>
+      )}
+      {/* Next arrow */}
+      {activeIndex < items.length - 1 && (
+        <TouchableOpacity style={sw.arrowRight} onPress={() => goTo(activeIndex + 1)}>
+          <View style={sw.arrowBg}><Ionicons name="chevron-forward" size={18} color="#fff" /></View>
+        </TouchableOpacity>
+      )}
+
+      {/* Dots / counter */}
+      {items.length > 1 && (
+        <View style={sw.dotsRow}>
+          {items.length <= 8
+            ? items.map((_, i) => (
+                <View key={i} style={[sw.dot,
+                  { backgroundColor: i === activeIndex ? colors.saffron : 'rgba(255,255,255,0.6)' },
+                  i === activeIndex && sw.dotActive]} />
+              ))
+            : <View style={sw.counter}><Text style={sw.counterTxt}>{activeIndex + 1} / {items.length}</Text></View>
+          }
+        </View>
+      )}
+    </View>
+  );
+}
+
+const sw = StyleSheet.create({
+  arrowLeft: { position: 'absolute', left: 10, top: '50%', marginTop: -16, zIndex: 10 },
+  arrowRight: { position: 'absolute', right: 10, top: '50%', marginTop: -16, zIndex: 10 },
+  arrowBg: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  dotsRow: { position: 'absolute', bottom: 10, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 5 },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  dotActive: { width: 18 },
+  counter: { backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
+  counterTxt: { color: '#fff', fontSize: 12, fontWeight: '600' },
+});
+
+// main screen
 export default function UserProfileScreen({ navigation, route }: any) {
   const { userId } = route.params;
   const { colors } = useTheme();
@@ -29,9 +109,6 @@ export default function UserProfileScreen({ navigation, route }: any) {
   const [selectedPost, setSelectedPost] = useState<any>(null);
   const [postMenuPost, setPostMenuPost] = useState<any>(null);
 
-  const isVideoUrl = (url: string) =>
-    url?.includes('/video/upload/') || url?.endsWith('.mp4');
-
   const loadData = async () => {
     try {
       const userDoc = await firestore().collection('users').doc(userId).get();
@@ -43,11 +120,7 @@ export default function UserProfileScreen({ navigation, route }: any) {
       const postsSnap = await firestore().collection('posts').where('userId', '==', userId).get();
       const postsList = postsSnap.docs
         .map(d => ({ id: d.id, ...d.data() }))
-        .sort((a: any, b: any) => {
-          const aTime = a.createdAt?.toDate?.() || new Date(0);
-          const bTime = b.createdAt?.toDate?.() || new Date(0);
-          return bTime - aTime;
-        });
+        .sort((a: any, b: any) => (b.createdAt?.toDate?.() || new Date(0)) - (a.createdAt?.toDate?.() || new Date(0)));
       setPosts(postsList);
       if (isOwnProfile) {
         const savedSnap = await firestore().collection('posts').where('bookmarks', 'array-contains', userId).get();
@@ -73,7 +146,6 @@ export default function UserProfileScreen({ navigation, route }: any) {
       await targetRef.update({ followers: firestore.FieldValue.arrayUnion(user.uid) });
       setIsFollowing(true);
       setProfile((prev: any) => ({ ...prev, followers: [...(prev.followers || []), user.uid] }));
-      // follow notification
       await firestore().collection('notifications').add({
         toUserId: userId, fromUserId: user.uid,
         fromUserName: profile?.name || 'Someone', fromUserAvatar: profile?.avatarUrl || '',
@@ -83,67 +155,60 @@ export default function UserProfileScreen({ navigation, route }: any) {
     }
   };
 
-  // delete post
   const handleDeletePost = (post: any) => {
-    Alert.alert(
-      'Delete Post',
-      'This will permanently delete your post and all its comments.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete', style: 'destructive',
-          onPress: async () => {
-            try {
-              await firestore().collection('posts').doc(post.id).delete();
-              setPosts(prev => prev.filter(p => p.id !== post.id));
-              setSavedPosts(prev => prev.filter(p => p.id !== post.id));
-              setPostMenuPost(null);
-              setSelectedPost(null);
-            } catch (e) {
-              Alert.alert('Error', 'Failed to delete post');
-            }
-          },
-        },
-      ]
-    );
+    Alert.alert('Delete Post', 'Permanently delete this post?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          await firestore().collection('posts').doc(post.id).delete();
+          setPosts(prev => prev.filter(p => p.id !== post.id));
+          setSavedPosts(prev => prev.filter(p => p.id !== post.id));
+          setPostMenuPost(null); setSelectedPost(null);
+        } catch { Alert.alert('Error', 'Failed to delete post'); }
+      }},
+    ]);
   };
 
-  //grid item
-  const renderGridItem = (post: any) => (
-    <TouchableOpacity
-      key={post.id}
-      style={styles.gridItem}
-      onPress={() => setSelectedPost(post)}
-      onLongPress={() => isOwnProfile && setPostMenuPost(post)}
-      activeOpacity={0.85}>
-      {isVideoUrl(post.imageUrl) ? (
-        <View style={styles.videoGridItem}>
-          <Ionicons name="play-circle" size={32} color="#fff" />
-        </View>
-      ) : (
-        <Image source={{ uri: post.imageUrl }} style={styles.gridImg} resizeMode="cover" />
-      )}
-      {post.likes?.length > 0 && (
-        <View style={styles.gridLikes}>
-          <Ionicons name="heart" size={12} color="#fff" />
-          <Text style={styles.gridLikesText}>{post.likes.length}</Text>
-        </View>
-      )}
-      {isVideoUrl(post.imageUrl) && (
-        <View style={styles.videoGridBadge}>
-          <Ionicons name="videocam" size={12} color="#fff" />
-        </View>
-      )}
-      {/* own post indicator */}
-      {isOwnProfile && (
-        <TouchableOpacity
-          style={styles.gridMenuBtn}
-          onPress={() => setPostMenuPost(post)}>
-          <Ionicons name="ellipsis-vertical" size={14} color="#fff" />
-        </TouchableOpacity>
-      )}
-    </TouchableOpacity>
-  );
+  const renderGridItem = (post: any) => {
+    const hasMultiple = post.mediaItems && post.mediaItems.length > 1;
+    return (
+      <TouchableOpacity key={post.id} style={styles.gridItem}
+        onPress={() => setSelectedPost(post)}
+        onLongPress={() => isOwnProfile && setPostMenuPost(post)}
+        activeOpacity={0.85}>
+        {isVideoUrl(post.imageUrl) ? (
+          <View style={styles.videoGridItem}>
+            <Ionicons name="play-circle" size={32} color="#fff" />
+          </View>
+        ) : (
+          <Image source={{ uri: post.imageUrl }} style={styles.gridImg} resizeMode="cover" />
+        )}
+        {/* multiple media badge */}
+        {hasMultiple && (
+          <View style={styles.multiMediaBadge}>
+            <Ionicons name="copy-outline" size={11} color="#fff" />
+            <Text style={styles.multiMediaTxt}>{post.mediaItems.length}</Text>
+          </View>
+        )}
+        {post.likes?.length > 0 && (
+          <View style={styles.gridLikes}>
+            <Ionicons name="heart" size={12} color="#fff" />
+            <Text style={styles.gridLikesText}>{post.likes.length}</Text>
+          </View>
+        )}
+        {isVideoUrl(post.imageUrl) && (
+          <View style={styles.videoGridBadge}>
+            <Ionicons name="videocam" size={12} color="#fff" />
+          </View>
+        )}
+        {isOwnProfile && (
+          <TouchableOpacity style={styles.gridMenuBtn} onPress={() => setPostMenuPost(post)}>
+            <Ionicons name="ellipsis-vertical" size={14} color="#fff" />
+          </TouchableOpacity>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <ScrollView
@@ -163,9 +228,7 @@ export default function UserProfileScreen({ navigation, route }: any) {
           <TouchableOpacity onPress={() => navigation.navigate('MainTabs', { screen: 'Settings' })}>
             <Ionicons name="settings-outline" size={24} color={colors.darkText} />
           </TouchableOpacity>
-        ) : (
-          <View style={{ width: 24 }} />
-        )}
+        ) : <View style={{ width: 24 }} />}
       </View>
 
       {/* Cover */}
@@ -210,7 +273,7 @@ export default function UserProfileScreen({ navigation, route }: any) {
           </TouchableOpacity>
         </View>
 
-        {/* Action buttons */}
+        {/* Buttons */}
         {isOwnProfile ? (
           <View style={styles.actionButtons}>
             <TouchableOpacity style={[styles.editBtn, { backgroundColor: colors.saffron }]}
@@ -234,7 +297,11 @@ export default function UserProfileScreen({ navigation, route }: any) {
               </Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.messageBtn, { borderColor: colors.saffron }]}
-              onPress={() => navigation.navigate('Chat', { userId, userName: profile?.name || 'Artist', userAvatar: profile?.avatarUrl || '' })}>
+              onPress={async () => {
+                const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+                const chatBg = await AsyncStorage.getItem('chatTheme').catch(() => 'default');
+                navigation.navigate('Chat', { userId, userName: profile?.name || 'Artist', userAvatar: profile?.avatarUrl || '', chatBg: chatBg || 'default' });
+              }}>
               <Ionicons name="chatbubble-outline" size={16} color={colors.saffron} />
               <Text style={[styles.messageBtnText, { color: colors.saffron }]}>{t.message}</Text>
             </TouchableOpacity>
@@ -258,13 +325,11 @@ export default function UserProfileScreen({ navigation, route }: any) {
         )}
       </View>
 
-      {/* Posts grid */}
+      {/* Grid */}
       {activeTab === 'posts' && (
         posts.length > 0 ? (
           <>
-            {isOwnProfile && (
-              <Text style={[styles.gridHint, { color: colors.muted }]}>Tap ⋮ on a post to edit or delete</Text>
-            )}
+            {isOwnProfile && <Text style={[styles.gridHint, { color: colors.muted }]}>Long press or tap ⋮ to manage posts</Text>}
             <View style={styles.grid}>{posts.map(post => renderGridItem(post))}</View>
           </>
         ) : (
@@ -274,21 +339,18 @@ export default function UserProfileScreen({ navigation, route }: any) {
           </View>
         )
       )}
-
       {activeTab === 'saved' && isOwnProfile && (
-        savedPosts.length > 0 ? (
-          <View style={styles.grid}>{savedPosts.map(post => renderGridItem(post))}</View>
-        ) : (
-          <View style={styles.emptyState}>
-            <Ionicons name="bookmark-outline" size={48} color={colors.muted} />
-            <Text style={[styles.emptyText, { color: colors.muted }]}>{t.noSavedPosts}</Text>
-          </View>
-        )
+        savedPosts.length > 0
+          ? <View style={styles.grid}>{savedPosts.map(post => renderGridItem(post))}</View>
+          : <View style={styles.emptyState}>
+              <Ionicons name="bookmark-outline" size={48} color={colors.muted} />
+              <Text style={[styles.emptyText, { color: colors.muted }]}>{t.noSavedPosts}</Text>
+            </View>
       )}
 
       <View style={{ height: 40 }} />
 
-      {/* post preview */}
+      {/*post Preview Modal with multi-image swiper */}
       <Modal visible={selectedPost !== null} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { backgroundColor: colors.card }]}>
@@ -297,7 +359,6 @@ export default function UserProfileScreen({ navigation, route }: any) {
                 {selectedPost?.title || 'Post'}
               </Text>
               <View style={styles.modalHeaderRight}>
-                {/* Edit/Delete button inside preview(own posts only) */}
                 {isOwnProfile && selectedPost && (
                   <TouchableOpacity
                     style={[styles.modalMenuBtn, { backgroundColor: colors.offwhite }]}
@@ -311,38 +372,32 @@ export default function UserProfileScreen({ navigation, route }: any) {
               </View>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              {selectedPost && isVideoUrl(selectedPost.imageUrl) ? (
-                <Video source={{ uri: selectedPost.imageUrl }} style={styles.modalMedia} resizeMode="contain" controls paused />
-              ) : selectedPost?.imageUrl ? (
-                <Image source={{ uri: selectedPost.imageUrl }} style={styles.modalMedia} resizeMode="contain" />
-              ) : null}
+              {/* Multi-image swiper */}
+              {selectedPost && <PostMediaSwiper post={selectedPost} colors={colors} />}
+
               <View style={styles.modalInfo}>
                 {selectedPost?.title && <Text style={[styles.modalPostTitle, { color: colors.darkText }]}>{selectedPost.title}</Text>}
                 {selectedPost?.caption ? <Text style={[styles.modalCaption, { color: colors.muted }]}>{selectedPost.caption}</Text> : null}
+                {selectedPost?.techniques ? (
+                  <Text style={[styles.modalCaption, { color: colors.muted }]}>🔧 {selectedPost.techniques}</Text>
+                ) : null}
                 {selectedPost?.category && (
                   <View style={[styles.modalCategoryTag, { backgroundColor: colors.warmBg }]}>
                     <Text style={[styles.modalCategoryText, { color: colors.saffron }]}># {selectedPost.category}</Text>
                   </View>
                 )}
                 <View style={[styles.modalStats, { borderTopColor: colors.border }]}>
-                  <View style={styles.modalStatItem}>
-                    <Ionicons name="heart" size={16} color="#FF4444" />
-                    <Text style={[styles.modalStatText, { color: colors.muted }]}>{selectedPost?.likes?.length || 0} {t.likes}</Text>
-                  </View>
-                  <View style={styles.modalStatItem}>
-                    <Ionicons name="chatbubble-outline" size={16} color={colors.muted} />
-                    <Text style={[styles.modalStatText, { color: colors.muted }]}>{selectedPost?.commentCount || 0} comments</Text>
-                  </View>
-                  <View style={styles.modalStatItem}>
-                    <Ionicons name="bookmark" size={16} color={colors.saffron} />
-                    <Text style={[styles.modalStatText, { color: colors.muted }]}>{selectedPost?.bookmarks?.length || 0} saves</Text>
-                  </View>
-                  {selectedPost?.viewCount > 0 && (
-                    <View style={styles.modalStatItem}>
-                      <Ionicons name="eye-outline" size={16} color={colors.muted} />
-                      <Text style={[styles.modalStatText, { color: colors.muted }]}>{selectedPost.viewCount} views</Text>
+                  {[
+                    { icon: 'heart', color: '#FF4444', val: selectedPost?.likes?.length || 0, label: t.likes },
+                    { icon: 'chatbubble-outline', color: colors.muted, val: selectedPost?.commentCount || 0, label: 'comments' },
+                    { icon: 'bookmark', color: colors.saffron, val: selectedPost?.bookmarks?.length || 0, label: 'saves' },
+                    ...(selectedPost?.viewCount > 0 ? [{ icon: 'eye-outline', color: colors.muted, val: selectedPost.viewCount, label: 'views' }] : []),
+                  ].map((s, i) => (
+                    <View key={i} style={styles.modalStatItem}>
+                      <Ionicons name={s.icon as any} size={16} color={s.color} />
+                      <Text style={[styles.modalStatText, { color: colors.muted }]}>{s.val} {s.label}</Text>
                     </View>
-                  )}
+                  ))}
                 </View>
               </View>
             </ScrollView>
@@ -350,75 +405,43 @@ export default function UserProfileScreen({ navigation, route }: any) {
         </View>
       </Modal>
 
-      {/* post mangement */}
+      {/* post Management */}
       <Modal visible={postMenuPost !== null} animationType="slide" transparent>
         <Pressable style={styles.menuOverlay} onPress={() => setPostMenuPost(null)}>
           <Pressable style={[styles.menuSheet, { backgroundColor: colors.card }]}>
-            {/* Post preview thumbnail */}
             {postMenuPost?.imageUrl && (
               <View style={[styles.menuPostPreview, { borderBottomColor: colors.border }]}>
                 <Image source={{ uri: postMenuPost.imageUrl }} style={styles.menuPostThumb} resizeMode="cover" />
                 <View style={styles.menuPostInfo}>
-                  <Text style={[styles.menuPostTitle, { color: colors.darkText }]} numberOfLines={1}>
-                    {postMenuPost?.title || 'Post'}
-                  </Text>
-                  <Text style={[styles.menuPostMeta, { color: colors.muted }]}>
-                    {postMenuPost?.likes?.length || 0} likes · {postMenuPost?.commentCount || 0} comments
-                  </Text>
+                  <Text style={[styles.menuPostTitle, { color: colors.darkText }]} numberOfLines={1}>{postMenuPost?.title || 'Post'}</Text>
+                  <Text style={[styles.menuPostMeta, { color: colors.muted }]}>{postMenuPost?.likes?.length || 0} likes · {postMenuPost?.commentCount || 0} comments</Text>
                 </View>
               </View>
             )}
-
             <View style={styles.menuHandle} />
             <Text style={[styles.menuTitle, { color: colors.darkText }]}>Manage Post</Text>
-
-            {/* View post */}
-            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: colors.border }]}
-              onPress={() => { setSelectedPost(postMenuPost); setPostMenuPost(null); }}>
-              <View style={[styles.menuItemIcon, { backgroundColor: '#E8F5F3' }]}>
-                <Ionicons name="eye-outline" size={20} color="#1A6B5C" />
-              </View>
-              <View style={styles.menuItemText}>
-                <Text style={[styles.menuItemTitle, { color: colors.darkText }]}>View Post</Text>
-                <Text style={[styles.menuItemSub, { color: colors.muted }]}>See full post details</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.muted} />
-            </TouchableOpacity>
-
-            {/* Share */}
-            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: colors.border }]}
-              onPress={async () => {
-                setPostMenuPost(null);
-                try {
-                  const { Share } = require('react-native');
-                  await Share.share({ title: postMenuPost?.title || 'FolkChat', message: `${postMenuPost?.title || 'Folk art'}\n\nShared from FolkChat` });
-                } catch { }
-              }}>
-              <View style={[styles.menuItemIcon, { backgroundColor: '#E8F0FE' }]}>
-                <Ionicons name="paper-plane-outline" size={20} color="#1A4D8B" />
-              </View>
-              <View style={styles.menuItemText}>
-                <Text style={[styles.menuItemTitle, { color: colors.darkText }]}>Share Post</Text>
-                <Text style={[styles.menuItemSub, { color: colors.muted }]}>Share with others</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.muted} />
-            </TouchableOpacity>
-
-            {/* Delete */}
-            <TouchableOpacity style={[styles.menuItem, { borderBottomColor: 'transparent' }]}
-              onPress={() => handleDeletePost(postMenuPost)}>
-              <View style={[styles.menuItemIcon, { backgroundColor: '#FEE8E8' }]}>
-                <Ionicons name="trash-outline" size={20} color="#FF4444" />
-              </View>
-              <View style={styles.menuItemText}>
-                <Text style={[styles.menuItemTitle, { color: '#FF4444' }]}>Delete Post</Text>
-                <Text style={[styles.menuItemSub, { color: colors.muted }]}>Permanently remove this post</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color="#FF4444" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.menuCancelBtn, { backgroundColor: colors.offwhite }]}
-              onPress={() => setPostMenuPost(null)}>
+            {[
+              { icon: 'eye-outline', label: 'View Post', sub: 'See full post details', bg: '#E8F5F3', color: '#1A6B5C',
+                onPress: () => { setSelectedPost(postMenuPost); setPostMenuPost(null); } },
+              { icon: 'paper-plane-outline', label: 'Share Post', sub: 'Share with others', bg: '#E8F0FE', color: '#1A4D8B',
+                onPress: async () => { setPostMenuPost(null); try { const { Share } = require('react-native'); await Share.share({ title: postMenuPost?.title || 'FolkChat', message: `${postMenuPost?.title || 'Folk art'}\n\nShared from FolkChat` }); } catch { } } },
+              { icon: 'trash-outline', label: 'Delete Post', sub: 'Permanently remove', bg: '#FEE8E8', color: '#FF4444',
+                onPress: () => handleDeletePost(postMenuPost) },
+            ].map((item, i) => (
+              <TouchableOpacity key={i}
+                style={[styles.menuItem, { borderBottomColor: i < 2 ? colors.border : 'transparent' }]}
+                onPress={item.onPress}>
+                <View style={[styles.menuItemIcon, { backgroundColor: item.bg }]}>
+                  <Ionicons name={item.icon as any} size={20} color={item.color} />
+                </View>
+                <View style={styles.menuItemText}>
+                  <Text style={[styles.menuItemTitle, { color: item.icon === 'trash-outline' ? '#FF4444' : colors.darkText }]}>{item.label}</Text>
+                  <Text style={[styles.menuItemSub, { color: colors.muted }]}>{item.sub}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={item.icon === 'trash-outline' ? '#FF4444' : colors.muted} />
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={[styles.menuCancelBtn, { backgroundColor: colors.offwhite }]} onPress={() => setPostMenuPost(null)}>
               <Text style={[styles.menuCancelTxt, { color: colors.darkText }]}>Cancel</Text>
             </TouchableOpacity>
           </Pressable>
@@ -427,8 +450,6 @@ export default function UserProfileScreen({ navigation, route }: any) {
     </ScrollView>
   );
 }
-
-import { Pressable } from 'react-native';
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -466,6 +487,8 @@ const styles = StyleSheet.create({
   gridImg: { width: '100%', height: '100%' },
   videoGridItem: { width: '100%', height: '100%', backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center' },
   videoGridBadge: { position: 'absolute', top: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 10, padding: 4 },
+  multiMediaBadge: { position: 'absolute', top: 5, right: 5, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 2 },
+  multiMediaTxt: { fontSize: 10, color: '#fff', fontWeight: '600' },
   gridLikes: { position: 'absolute', bottom: 6, left: 6, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
   gridLikesText: { fontSize: 11, color: '#fff', fontWeight: '600' },
   gridMenuBtn: { position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 10, padding: 4 },
@@ -477,10 +500,9 @@ const styles = StyleSheet.create({
   modalHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   modalMenuBtn: { width: 34, height: 34, borderRadius: 17, justifyContent: 'center', alignItems: 'center' },
   modalTitle: { fontSize: 16, fontWeight: 'bold', flex: 1 },
-  modalMedia: { width, height: width, backgroundColor: '#000' },
   modalInfo: { padding: 20 },
   modalPostTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 8 },
-  modalCaption: { fontSize: 14, lineHeight: 20, marginBottom: 12 },
+  modalCaption: { fontSize: 14, lineHeight: 20, marginBottom: 8 },
   modalCategoryTag: { alignSelf: 'flex-start', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6, marginBottom: 16 },
   modalCategoryText: { fontSize: 13, fontWeight: '600' },
   modalStats: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, paddingTop: 16, borderTopWidth: 0.5 },
