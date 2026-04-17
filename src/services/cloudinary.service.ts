@@ -1,5 +1,4 @@
-const CLOUD_NAME = 'YOUR_CLOUD_NAME';
-const UPLOAD_PRESET = 'YOUR_UPLOAD_PRESET';
+import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_UPLOAD_PRESET } from '../config/keys';
 
 export const uploadToCloudinary = async (
   fileUri: string,
@@ -11,10 +10,10 @@ export const uploadToCloudinary = async (
     type: type === 'image' ? 'image/jpeg' : 'video/mp4',
     name: `upload_${Date.now()}.${type === 'image' ? 'jpg' : 'mp4'}`,
   } as any);
-  formData.append('upload_preset', UPLOAD_PRESET!);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
 
   const response = await fetch(
-    `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${type}/upload`,
+    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${type}/upload`,
     { method: 'POST', body: formData }
   );
 

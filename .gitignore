@@ -80,5 +80,4 @@ google-services.json
 GoogleService-Info.plist
 
 # Sensitive service files
-src/services/cloudinary.service.ts
-src/services/firebase.ts
+src/config/keys.ts
