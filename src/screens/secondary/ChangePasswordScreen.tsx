@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, Alert, ActivityIndicator,
-  Image, 
-  ScrollView, 
+  Image,
+  ScrollView,
 } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import auth from '@react-native-firebase/auth';
@@ -30,13 +30,13 @@ export default function ChangePasswordScreen({ navigation }: any) {
   // handle password change submission
   const handleChange = async () => {
     if (!currentPw || !newPw || !confirmPw) {
-      Alert.alert('Error', 'Please fill all fields'); return;
+      Alert.alert(t.errorTitle, t.changePwFillAll); return;
     }
     if (newPw !== confirmPw) {
-      Alert.alert('Error', 'New passwords do not match'); return;
+      Alert.alert(t.errorTitle, t.changePwNoMatch); return;
     }
     if (newPw.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters'); return;
+      Alert.alert(t.errorTitle, t.changePwTooShort); return;
     }
     setLoading(true);
     try {
@@ -48,15 +48,39 @@ export default function ChangePasswordScreen({ navigation }: any) {
       await user.reauthenticateWithCredential(cred);
 
       await user.updatePassword(newPw);
-      Alert.alert('Success', 'Password changed successfully!', [
-        { text: 'OK', onPress: () => navigation.goBack() }
+      Alert.alert(t.changePwSuccess, t.changePwSuccessMsg, [
+        { text: t.okBtn, onPress: () => navigation.goBack() }
       ]);
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to change password');
+      Alert.alert(t.errorTitle, e.message || t.changePwFailed);
     } finally {
       setLoading(false);
     }
   };
+
+  const fields = [
+    {
+      label: t.changePwCurrentLabel,
+      value: currentPw,
+      set: setCurrentPw,
+      show: showCurrent,
+      toggle: setShowCurrent,
+    },
+    {
+      label: t.changePwNewLabel,
+      value: newPw,
+      set: setNewPw,
+      show: showNew,
+      toggle: setShowNew,
+    },
+    {
+      label: t.changePwConfirmLabel,
+      value: confirmPw,
+      set: setConfirmPw,
+      show: showConfirm,
+      toggle: setShowConfirm,
+    },
+  ];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
@@ -81,11 +105,7 @@ export default function ChangePasswordScreen({ navigation }: any) {
 
         <View style={styles.form}>
 
-          {[
-            { label: 'Current Password', value: currentPw, set: setCurrentPw, show: showCurrent, toggle: setShowCurrent },
-            { label: 'New Password', value: newPw, set: setNewPw, show: showNew, toggle: setShowNew },
-            { label: 'Confirm New Password', value: confirmPw, set: setConfirmPw, show: showConfirm, toggle: setShowConfirm },
-          ].map((field, i) => (
+          {fields.map((field, i) => (
             <View key={i} style={styles.fieldGroup}>
               <Text style={[styles.label, { color: colors.darkText }]}>{field.label}</Text>
               <View style={[styles.inputRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -95,7 +115,7 @@ export default function ChangePasswordScreen({ navigation }: any) {
                   onChangeText={field.set}
                   secureTextEntry={!field.show}
                   placeholderTextColor={colors.muted}
-                  placeholder="••••••••"
+                  placeholder={t.changePwPlaceholder}
                 />
                 <TouchableOpacity onPress={() => field.toggle(!field.show)}>
                   <Ionicons
@@ -107,14 +127,14 @@ export default function ChangePasswordScreen({ navigation }: any) {
             </View>
           ))}
 
-          {/*submit button */}
+          {/* submit button */}
           <TouchableOpacity
-            style={[styles.btn, loading && { opacity: 0.7 }]}
+            style={[styles.btn, { backgroundColor: colors.saffron }, loading && { opacity: 0.7 }]}
             onPress={handleChange}
             disabled={loading}>
             {loading
               ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.btnText}>Update Password</Text>}
+              : <Text style={styles.btnText}>{t.changePwUpdateBtn}</Text>}
           </TouchableOpacity>
 
         </View>
@@ -154,7 +174,7 @@ const styles = StyleSheet.create({
   input: { flex: 1, paddingVertical: 14, fontSize: 15 },
 
   btn: {
-    backgroundColor: '#D4651A', padding: 16,
+    padding: 16,
     borderRadius: 12, alignItems: 'center', marginTop: 8,
   },
   btnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },

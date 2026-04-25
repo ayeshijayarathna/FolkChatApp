@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import firestore from '@react-native-firebase/firestore';
+import Video from 'react-native-video';
 import { useTheme } from '../../context/ThemeContext';
 import { useLang } from '../../context/LanguageContext';
 import { useAuthStore } from '../../store/authStore';
@@ -13,7 +14,31 @@ import { useAuthStore } from '../../store/authStore';
 const { width } = Dimensions.get('window');
 const GRID = Math.floor((width - 4) / 3);
 
-//reusable PostGrid 
+const isVideoUrl = (url: string) =>
+  url?.includes('/video/upload/') || url?.endsWith('.mp4') || url?.endsWith('.mov');
+
+// video thumbnail component 
+function VideoThumbnail({ url, style }: { url: string; style: any }) {
+  return (
+    <View style={style}>
+      <Video
+        source={{ uri: url }}
+        style={{ width: '100%', height: '100%' }}
+        resizeMode="cover"
+        paused
+        muted
+        repeat={false}
+      />
+      <View style={pgStyles.videoOverlay}>
+        <View style={pgStyles.playBtn}>
+          <Ionicons name="play" size={20} color="#fff" />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// reusable PostGrid
 function PostGrid({ posts, colors, onPress }: { posts: Post[]; colors: any; onPress: (p: Post) => void }) {
   if (posts.length === 0) return null;
   return (
@@ -24,38 +49,61 @@ function PostGrid({ posts, colors, onPress }: { posts: Post[]; colors: any; onPr
       scrollEnabled={false}
       columnWrapperStyle={{ gap: 2 }}
       ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
-      renderItem={({ item }) => (
-        <TouchableOpacity
-          style={{ width: GRID, height: GRID, position: 'relative', overflow: 'hidden' }}
-          onPress={() => onPress(item)}
-          activeOpacity={0.85}>
-          {item.imageUrl
-            ? <Image source={{ uri: item.imageUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-            : <View style={{ width: '100%', height: '100%', backgroundColor: colors.warmBg, justifyContent: 'center', alignItems: 'center' }}>
+      renderItem={({ item }) => {
+        const firstMedia = item.mediaItems?.[0];
+        const mediaUrl = firstMedia?.url || item.imageUrl;
+        const isVideo = firstMedia?.type === 'video' || isVideoUrl(item.imageUrl);
+
+        return (
+          <TouchableOpacity
+            style={{ width: GRID, height: GRID, position: 'relative', overflow: 'hidden' }}
+            onPress={() => onPress(item)}
+            activeOpacity={0.85}>
+            {mediaUrl ? (
+              isVideo ? (
+                <VideoThumbnail url={mediaUrl} style={{ width: '100%', height: '100%' }} />
+              ) : (
+                <Image source={{ uri: mediaUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+              )
+            ) : (
+              <View style={{ width: '100%', height: '100%', backgroundColor: colors.warmBg, justifyContent: 'center', alignItems: 'center' }}>
                 <Ionicons name="image-outline" size={28} color={colors.muted} />
               </View>
-          }
-          {/* multiple media badge */}
-          {(item as any).mediaItems?.length > 1 && (
-            <View style={pgStyles.mediaCount}>
-              <Ionicons name="copy-outline" size={11} color="#fff" />
-              <Text style={pgStyles.mediaCountTxt}>{(item as any).mediaItems.length}</Text>
-            </View>
-          )}
-          {/* likes badge */}
-          {(item.likes || []).length > 0 && (
-            <View style={pgStyles.likes}>
-              <Ionicons name="heart" size={10} color="#fff" />
-              <Text style={pgStyles.likesTxt}>{item.likes.length}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      )}
+            )}
+
+            {/* video badge in corner */}
+            {isVideo && (
+              <View style={pgStyles.videoBadge}>
+                <Ionicons name="videocam" size={11} color="#fff" />
+              </View>
+            )}
+
+            {/* multiple media badge */}
+            {(item as any).mediaItems?.length > 1 && (
+              <View style={pgStyles.mediaCount}>
+                <Ionicons name="copy-outline" size={11} color="#fff" />
+                <Text style={pgStyles.mediaCountTxt}>{(item as any).mediaItems.length}</Text>
+              </View>
+            )}
+
+            {/* likes badge */}
+            {(item.likes || []).length > 0 && (
+              <View style={pgStyles.likes}>
+                <Ionicons name="heart" size={10} color="#fff" />
+                <Text style={pgStyles.likesTxt}>{item.likes.length}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        );
+      }}
     />
   );
 }
 
 const pgStyles = StyleSheet.create({
+  videoOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)' },
+  playBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)' },
+  videoBadge: { position: 'absolute', top: 5, left: 5, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, padding: 4 },
   mediaCount: { position: 'absolute', top: 5, right: 5, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 2 },
   mediaCountTxt: { fontSize: 10, color: '#fff', fontWeight: '600' },
   likes: { position: 'absolute', bottom: 5, left: 5, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 2 },
@@ -76,7 +124,7 @@ interface Post {
 
 function initials(name: string) { return (name || 'A').charAt(0).toUpperCase(); }
 
-//modal img swiper
+// modal img/video swiper
 function ModalSwiper({ post, colors }: { post: Post; colors: any }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const flatRef = useRef<FlatList>(null);
@@ -84,7 +132,7 @@ function ModalSwiper({ post, colors }: { post: Post; colors: any }) {
   const items: { url: string; type: 'image' | 'video' }[] =
     post.mediaItems && post.mediaItems.length > 0
       ? post.mediaItems
-      : [{ url: post.imageUrl, type: 'image' }];
+      : [{ url: post.imageUrl, type: isVideoUrl(post.imageUrl) ? 'video' : 'image' }];
 
   const goTo = (idx: number) => {
     if (idx < 0 || idx >= items.length) return;
@@ -101,8 +149,19 @@ function ModalSwiper({ post, colors }: { post: Post; colors: any }) {
         keyExtractor={(_, i) => String(i)}
         getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
         onMomentumScrollEnd={e => setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / width))}
-        renderItem={({ item }) => (
-          <Image source={{ uri: item.url }} style={dm.image} resizeMode="cover" />
+        renderItem={({ item, index }) => (
+          item.type === 'video' ? (
+            <Video
+              source={{ uri: item.url }}
+              style={dm.image}
+              resizeMode="contain"
+              controls
+              paused={index !== activeIndex}
+              repeat={false}
+            />
+          ) : (
+            <Image source={{ uri: item.url }} style={dm.image} resizeMode="cover" />
+          )
         )}
       />
       {/* prev arrow */}
@@ -140,8 +199,8 @@ function ModalSwiper({ post, colors }: { post: Post; colors: any }) {
   );
 }
 
-//post detail modal 
-function PostDetailModal({ post, visible, onClose, navigation, colors, user, userProfile }: any) {
+// post detail modal
+function PostDetailModal({ post, visible, onClose, navigation, colors, user, userProfile, t }: any) {
   const [liked, setLiked] = useState((post?.likes || []).includes(user?.uid));
   const [saved, setSaved] = useState((post?.bookmarks || []).includes(user?.uid));
   const [likesCount, setLikesCount] = useState(post?.likes?.length || 0);
@@ -214,7 +273,7 @@ function PostDetailModal({ post, visible, onClose, navigation, colors, user, use
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false}>
-            {/* multi img swiper */}
+            {/* multi img/video swiper */}
             <ModalSwiper post={post} colors={colors} />
 
             {/* actions */}
@@ -240,7 +299,9 @@ function PostDetailModal({ post, visible, onClose, navigation, colors, user, use
             {/* info */}
             <View style={dm.info}>
               {likesCount > 0 && (
-                <Text style={[dm.likes, { color: colors.darkText }]}>{likesCount} {likesCount > 1 ? 'likes' : 'like'}</Text>
+                <Text style={[dm.likes, { color: colors.darkText }]}>
+                  {likesCount} {likesCount > 1 ? t.searchLikes : t.searchLike}
+                </Text>
               )}
               {post.title ? (
                 <Text style={[dm.title, { color: colors.darkText }]}>{post.title}</Text>
@@ -253,7 +314,9 @@ function PostDetailModal({ post, visible, onClose, navigation, colors, user, use
               ) : null}
               {post.commentCount > 0 && (
                 <TouchableOpacity onPress={() => { onClose(); navigation.navigate('UserProfile', { userId: post.userId }); }}>
-                  <Text style={[dm.commentsLink, { color: colors.muted }]}>View all {post.commentCount} comments</Text>
+                  <Text style={[dm.commentsLink, { color: colors.muted }]}>
+                    {t.searchViewAllComments} {post.commentCount} {t.searchComments}
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -274,7 +337,7 @@ const dm = StyleSheet.create({
   initTxt: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   userName: { fontSize: 14, fontWeight: 'bold' },
   category: { fontSize: 12 },
-  image: { width, height: width },
+  image: { width, height: width, backgroundColor: '#000' },
   arrowLeft: { position: 'absolute', left: 10, top: '50%', marginTop: -16, zIndex: 10 },
   arrowRight: { position: 'absolute', right: 10, top: '50%', marginTop: -16, zIndex: 10 },
   arrowBg: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' },
@@ -294,7 +357,7 @@ const dm = StyleSheet.create({
   commentsLink: { fontSize: 13 },
 });
 
-//main SearchScreen
+// main SearchScreen
 export default function SearchScreen({ navigation }: any) {
   const { colors } = useTheme();
   const { t } = useLang();
@@ -311,12 +374,10 @@ export default function SearchScreen({ navigation }: any) {
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
-  // load all posts &  suggested artists on mount
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        // my following list
         let myFollowing: string[] = [];
         if (user?.uid) {
           const me = await firestore().collection('users').doc(user.uid).get();
@@ -324,7 +385,6 @@ export default function SearchScreen({ navigation }: any) {
           setFollowingList(myFollowing);
         }
 
-        // suggested: not following, sorted by follower count
         const usersSnap = await firestore().collection('users').get();
         const suggested = usersSnap.docs
           .map(d => ({ uid: d.id, ...d.data() } as Artist))
@@ -333,7 +393,6 @@ export default function SearchScreen({ navigation }: any) {
           .slice(0, 15);
         setSuggestedArtists(suggested);
 
-        // all recent posts enriched with user info
         const postsSnap = await firestore().collection('posts').orderBy('createdAt', 'desc').limit(50).get();
         const enriched = await Promise.all(postsSnap.docs.map(async d => {
           const data = d.data();
@@ -355,7 +414,6 @@ export default function SearchScreen({ navigation }: any) {
     if (!q.trim()) { setHasSearched(false); setArtists([]); setPosts([]); return; }
     setHasSearched(true);
     const lower = q.toLowerCase();
-    // filter from already loaded data
     const matchedPosts = allPosts.filter(p =>
       (p.title || '').toLowerCase().includes(lower) ||
       (p.category || '').toLowerCase().includes(lower) ||
@@ -374,7 +432,6 @@ export default function SearchScreen({ navigation }: any) {
     if (!user?.uid) return;
     const isFollowing = followingList.includes(targetUid);
     setFollowingList(prev => isFollowing ? prev.filter(id => id !== targetUid) : [...prev, targetUid]);
-    // also remove from suggested if followed
     if (!isFollowing) {
       setSuggestedArtists(prev => prev.filter(a => a.uid !== targetUid));
     }
@@ -400,6 +457,12 @@ export default function SearchScreen({ navigation }: any) {
   const displayPosts = hasSearched ? posts : allPosts;
   const displayArtists = hasSearched ? artists : suggestedArtists;
 
+  const postsFoundLabel = (count: number) =>
+    `${count} ${count === 1 ? t.searchPostsFound : t.searchPostsFoundPlural}`;
+
+  const artistsFoundLabel = (count: number) =>
+    `${count} ${count === 1 ? t.searchArtistsFound : t.searchArtistsFoundPlural}`;
+
   const renderArtistCard = (item: Artist) => {
     const isFollowing = followingList.includes(item.uid);
     return (
@@ -416,14 +479,18 @@ export default function SearchScreen({ navigation }: any) {
         }
         <View style={styles.artistInfo}>
           <Text style={[styles.artistName, { color: colors.darkText }]} numberOfLines={1}>{item.name}</Text>
-          <Text style={[styles.artistCat, { color: colors.saffron }]} numberOfLines={1}>{item.artistCategory || 'Folk Artist'}</Text>
-          <Text style={[styles.artistFollowers, { color: colors.muted }]}>{(item.followers || []).length} followers</Text>
+          <Text style={[styles.artistCat, { color: colors.saffron }]} numberOfLines={1}>
+            {item.artistCategory || t.searchFolkArtist}
+          </Text>
+          <Text style={[styles.artistFollowers, { color: colors.muted }]}>
+            {(item.followers || []).length} {t.searchFollowers}
+          </Text>
         </View>
         <TouchableOpacity
           style={[styles.followBtn, { borderColor: colors.saffron }, isFollowing && { backgroundColor: colors.warmBg, borderColor: colors.border }]}
           onPress={() => handleFollow(item.uid)}>
           <Text style={[styles.followBtnTxt, { color: isFollowing ? colors.muted : colors.saffron }]}>
-            {isFollowing ? 'Following' : 'Follow'}
+            {isFollowing ? t.following_btn : t.follow}
           </Text>
         </TouchableOpacity>
       </TouchableOpacity>
@@ -432,14 +499,13 @@ export default function SearchScreen({ navigation }: any) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
-      {/* search bar */}
       <View style={[styles.searchBar, { backgroundColor: colors.header, borderBottomColor: colors.border }]}>
-        <Text style={[styles.screenTitle, { color: colors.darkText }]}>Search</Text>
+        <Text style={[styles.screenTitle, { color: colors.darkText }]}>{t.searchTitle}</Text>
         <View style={[styles.inputWrap, { backgroundColor: colors.offwhite, borderColor: colors.border }]}>
           <Ionicons name="search-outline" size={18} color={colors.muted} />
           <TextInput
             style={[styles.input, { color: colors.darkText }]}
-            placeholder="Search artists, artworks..."
+            placeholder={t.searchPlaceholder}
             placeholderTextColor={colors.muted}
             value={query}
             onChangeText={v => { setQuery(v); handleSearch(v); }}
@@ -453,14 +519,13 @@ export default function SearchScreen({ navigation }: any) {
         </View>
       </View>
 
-      {/* Tabs */}
       <View style={[styles.tabs, { backgroundColor: colors.header, borderBottomColor: colors.border }]}>
         {(['posts', 'artists'] as const).map(tab => (
           <TouchableOpacity key={tab}
             style={[styles.tab, activeTab === tab && [styles.tabActive, { borderBottomColor: colors.saffron }]]}
             onPress={() => setActiveTab(tab)}>
             <Text style={[styles.tabTxt, { color: activeTab === tab ? colors.saffron : colors.muted }]}>
-              {tab === 'posts' ? 'Posts' : 'Artists'}
+              {tab === 'posts' ? t.searchPosts : t.searchArtists}
             </Text>
           </TouchableOpacity>
         ))}
@@ -472,22 +537,22 @@ export default function SearchScreen({ navigation }: any) {
         </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
-
-          {/* Posts tab */}
           {activeTab === 'posts' && (
             <>
               {hasSearched && (
                 <Text style={[styles.resultHint, { color: colors.muted }]}>
-                  {displayPosts.length} post{displayPosts.length !== 1 ? 's' : ''} found
+                  {postsFoundLabel(displayPosts.length)}
                 </Text>
               )}
               {!hasSearched && (
-                <Text style={[styles.sectionLabel, { color: colors.darkText }]}>All Posts</Text>
+                <Text style={[styles.sectionLabel, { color: colors.darkText }]}>{t.searchAllPosts}</Text>
               )}
               {displayPosts.length === 0 && hasSearched ? (
                 <View style={styles.emptyState}>
                   <Ionicons name="search-outline" size={48} color={colors.muted} />
-                  <Text style={[styles.emptyTxt, { color: colors.muted }]}>No posts found for "{query}"</Text>
+                  <Text style={[styles.emptyTxt, { color: colors.muted }]}>
+                    {t.searchNoPostsFound} "{query}"
+                  </Text>
                 </View>
               ) : (
                 <PostGrid posts={displayPosts} colors={colors} onPress={setSelectedPost} />
@@ -495,20 +560,19 @@ export default function SearchScreen({ navigation }: any) {
             </>
           )}
 
-          {/* Artists tab */}
           {activeTab === 'artists' && (
             <>
               <Text style={[styles.sectionLabel, { color: colors.darkText }]}>
-                {hasSearched ? `${displayArtists.length} artist${displayArtists.length !== 1 ? 's' : ''} found` : 'Suggested for You'}
+                {hasSearched ? artistsFoundLabel(displayArtists.length) : t.searchSuggestedTitle}
               </Text>
               {!hasSearched && (
-                <Text style={[styles.sectionSub, { color: colors.muted }]}>Artists you don't follow yet</Text>
+                <Text style={[styles.sectionSub, { color: colors.muted }]}>{t.searchSuggestedSub}</Text>
               )}
               {displayArtists.length === 0 ? (
                 <View style={styles.emptyState}>
                   <Ionicons name="people-outline" size={48} color={colors.muted} />
                   <Text style={[styles.emptyTxt, { color: colors.muted }]}>
-                    {hasSearched ? `No artists found for "${query}"` : 'No suggestions available'}
+                    {hasSearched ? `${t.searchNoArtistsFound} "${query}"` : t.searchNoSuggestions}
                   </Text>
                 </View>
               ) : (
@@ -521,7 +585,6 @@ export default function SearchScreen({ navigation }: any) {
         </ScrollView>
       )}
 
-      {/* Post detail modal */}
       <PostDetailModal
         post={selectedPost}
         visible={selectedPost !== null}
@@ -530,6 +593,7 @@ export default function SearchScreen({ navigation }: any) {
         colors={colors}
         user={user}
         userProfile={userProfile}
+        t={t}
       />
     </View>
   );
@@ -549,9 +613,6 @@ const styles = StyleSheet.create({
   resultHint: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, fontSize: 13 },
   sectionLabel: { fontSize: 16, fontWeight: '700', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 4 },
   sectionSub: { fontSize: 13, paddingHorizontal: 16, marginBottom: 12 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  gridItem: { position: 'relative', overflow: 'hidden' },
-  gridImg: { width: '100%', height: '100%' },
   artistCard: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 14, borderWidth: 1, marginBottom: 10, gap: 12 },
   artistAvatar: { width: 52, height: 52, borderRadius: 26 },
   artistAvatarInit: { width: 52, height: 52, borderRadius: 26, justifyContent: 'center', alignItems: 'center' },

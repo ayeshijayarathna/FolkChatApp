@@ -2,10 +2,11 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ScrollView, RefreshControl, ActivityIndicator,
-  Dimensions, Animated,
+  Dimensions, Animated, Image,
 } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import firestore from '@react-native-firebase/firestore';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 import { useLang } from '../../context/LanguageContext';
 import { useAuthStore } from '../../store/authStore';
@@ -32,7 +33,6 @@ const ANGLES = [
   'folk art techniques showcase',
 ];
 
-// types
 interface PostStat {
   id: string; title: string;
   likes: number; comments: number; bookmarks: number; views: number;
@@ -45,21 +45,22 @@ interface Analytics {
 }
 type Period = '7d' | '30d' | '1y';
 
-//helpers
 function fmtNum(n: number): string {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
   return String(n);
 }
 
-function calcEngagement(a: Analytics) {
+function initials(name: string) { return (name || 'A').charAt(0).toUpperCase(); }
+
+function calcEngagement(a: Analytics, t: any) {
   const interactions = a.totalLikes + a.totalComments + a.totalBookmarks;
   const reach = a.totalViews > 0 ? a.totalViews : (a.followers > 0 ? a.followers * a.totalPosts : 1);
   const rate = reach > 0 ? Math.min((interactions / reach) * 100, 100) : 0;
   const formula = a.totalViews > 0
     ? `(Likes + Comments + Saves) ÷ Total Views × 100`
     : `(Likes + Comments + Saves) ÷ (Followers × Posts) × 100`;
-  const label = rate > 6 ? 'Excellent' : rate > 3 ? 'Good' : rate > 1 ? 'Average' : 'Growing';
+  const label = rate > 6 ? t.excellent : rate > 3 ? t.good : rate > 1 ? t.average : t.growing;
   const color = rate > 6 ? C.green : rate > 3 ? C.teal : rate > 1 ? C.blue : C.slate;
   return { rate, formula, label, color };
 }
@@ -100,8 +101,8 @@ function buildChart(posts: PostStat[], period: Period) {
 }
 
 //line Chart 
-function LineChart({ data, labels, color, colors, period }: {
-  data: number[]; labels: string[]; color: string; colors: any; period: Period;
+function LineChart({ data, labels, color, colors, t }: {
+  data: number[]; labels: string[]; color: string; colors: any; t: any;
 }) {
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const max = Math.max(...data, 1);
@@ -182,16 +183,14 @@ function LineChart({ data, labels, color, colors, period }: {
         </ScrollView>
       </View>
       {allZero && (
-        <Text style={[styles.chartEmptyHint, { color: colors.muted }]}>
-          No activity yet — interactions will appear here
-        </Text>
+        <Text style={[styles.chartEmptyHint, { color: colors.muted }]}>{t.noActivityHint}</Text>
       )}
     </View>
   );
 }
 
-//follower Chart
-function FollowerChart({ followers, following, colors }: { followers: number; following: number; colors: any }) {
+// follower Chart 
+function FollowerChart({ followers, following, colors, t }: { followers: number; following: number; colors: any; t: any }) {
   const BAR_W = width - 64 - 40;
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -201,13 +200,13 @@ function FollowerChart({ followers, following, colors }: { followers: number; fo
   const fWidth = anim.interpolate({ inputRange: [0, 1], outputRange: [0, BAR_W * (followers / total)] });
   const gWidth = anim.interpolate({ inputRange: [0, 1], outputRange: [0, BAR_W * (following / total)] });
   const ratio = followers > 0 && following > 0 ? (followers / following).toFixed(2) : '—';
-  const health = followers > following ? 'Great — more people follow you than you follow!'
-    : followers === following ? 'Balanced — equal followers and following.'
-    : 'Tip — grow your followers to improve your ratio.';
+  const health = followers > following ? t.audienceHealthMore
+    : followers === following ? t.audienceHealthEqual
+    : t.audienceHealthLess;
 
   return (
     <View style={styles.followerWrap}>
-      <View style={[styles.followerTrack, { backgroundColor: colors.warmBg }]}>
+      <View style={[styles.followerTrack, { backgroundColor: `${colors.muted}15` }]}>
         <Animated.View style={[styles.followerBarF, { width: fWidth, backgroundColor: C.blue }]} />
         <Animated.View style={{ height: '100%', backgroundColor: C.violet, width: gWidth }} />
       </View>
@@ -216,17 +215,17 @@ function FollowerChart({ followers, following, colors }: { followers: number; fo
           <View style={[styles.followerDot, { backgroundColor: C.blue }]} />
           <View>
             <Text style={[styles.followerVal, { color: colors.darkText }]}>{fmtNum(followers)}</Text>
-            <Text style={[styles.followerSub, { color: colors.muted }]}>Followers</Text>
+            <Text style={[styles.followerSub, { color: colors.muted }]}>{t.followers}</Text>
           </View>
         </View>
         <View style={styles.ratioBadge}>
           <Text style={[styles.ratioTxt, { color: colors.darkText }]}>{ratio}</Text>
-          <Text style={[styles.ratioSub, { color: colors.muted }]}>ratio</Text>
+          <Text style={[styles.ratioSub, { color: colors.muted }]}>{t.ratio}</Text>
         </View>
         <View style={[styles.followerLabelItem, { alignItems: 'flex-end' }]}>
           <View>
             <Text style={[styles.followerVal, { color: colors.darkText, textAlign: 'right' }]}>{fmtNum(following)}</Text>
-            <Text style={[styles.followerSub, { color: colors.muted, textAlign: 'right' }]}>Following</Text>
+            <Text style={[styles.followerSub, { color: colors.muted, textAlign: 'right' }]}>{t.following}</Text>
           </View>
           <View style={[styles.followerDot, { backgroundColor: C.violet }]} />
         </View>
@@ -239,9 +238,9 @@ function FollowerChart({ followers, following, colors }: { followers: number; fo
   );
 }
 
-//engagement Section
-function EngagementSection({ a, colors }: { a: Analytics; colors: any }) {
-  const { rate, formula, label, color } = calcEngagement(a);
+//engagement Section 
+function EngagementSection({ a, colors, t }: { a: Analytics; colors: any; t: any }) {
+  const { rate, formula, label, color } = calcEngagement(a, t);
   const interactions = a.totalLikes + a.totalComments + a.totalBookmarks;
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -251,9 +250,9 @@ function EngagementSection({ a, colors }: { a: Analytics; colors: any }) {
   const barWidth = anim.interpolate({ inputRange: [0, 1], outputRange: [0, ENG_BAR_W * Math.min(rate / 100, 1)] });
   const BREAK_BAR_W = width - 64 - 40 - 64 - 50 - 48;
   const breakdown = [
-    { label: 'Likes',    val: a.totalLikes,     pct: interactions > 0 ? Math.round(a.totalLikes / interactions * 100)     : 0, color: C.rose },
-    { label: 'Comments', val: a.totalComments,   pct: interactions > 0 ? Math.round(a.totalComments / interactions * 100)  : 0, color: C.violet },
-    { label: 'Saves',    val: a.totalBookmarks,  pct: interactions > 0 ? Math.round(a.totalBookmarks / interactions * 100) : 0, color: C.teal },
+    { label: t.likesLabel,    val: a.totalLikes,     pct: interactions > 0 ? Math.round(a.totalLikes / interactions * 100)     : 0, color: C.rose },
+    { label: t.commentsLabel, val: a.totalComments,  pct: interactions > 0 ? Math.round(a.totalComments / interactions * 100)  : 0, color: C.violet },
+    { label: t.savesLabel,    val: a.totalBookmarks, pct: interactions > 0 ? Math.round(a.totalBookmarks / interactions * 100) : 0, color: C.teal },
   ];
 
   return (
@@ -261,17 +260,17 @@ function EngagementSection({ a, colors }: { a: Analytics; colors: any }) {
       <View style={styles.engRateRow}>
         <View style={styles.engRateLeft}>
           <Text style={[styles.engRateBig, { color }]}>{rate.toFixed(2)}%</Text>
-          <View style={[styles.engRateBadge, { backgroundColor: `${color}15` }]}>
+          <View style={[styles.engRateBadge, { backgroundColor: `${color}20` }]}>
             <Text style={[styles.engRateBadgeTxt, { color }]}>{label}</Text>
           </View>
         </View>
         <View style={styles.engBenchmarks}>
-          <Text style={[styles.engBenchTitle, { color: colors.muted }]}>Industry benchmarks</Text>
+          <Text style={[styles.engBenchTitle, { color: colors.muted }]}>{t.industryBenchmarks}</Text>
           {[
-            { lbl: 'Excellent', val: '> 6%', color: C.green },
-            { lbl: 'Good',      val: '3–6%', color: C.teal },
-            { lbl: 'Average',   val: '1–3%', color: C.blue },
-            { lbl: 'Growing',   val: '< 1%', color: C.slate },
+            { lbl: t.excellent, val: '> 6%', color: C.green },
+            { lbl: t.good,      val: '3–6%', color: C.teal },
+            { lbl: t.average,   val: '1–3%', color: C.blue },
+            { lbl: t.growing,   val: '< 1%', color: C.slate },
           ].map((b, i) => (
             <View key={i} style={styles.engBenchRow}>
               <View style={[styles.engBenchDot, { backgroundColor: b.color }]} />
@@ -280,16 +279,16 @@ function EngagementSection({ a, colors }: { a: Analytics; colors: any }) {
           ))}
         </View>
       </View>
-      <View style={[styles.engBarTrack, { backgroundColor: colors.warmBg }]}>
+      <View style={[styles.engBarTrack, { backgroundColor: `${colors.muted}15` }]}>
         <Animated.View style={[styles.engBarFill, { width: barWidth, backgroundColor: color }]} />
       </View>
-      <Text style={[styles.engFormula, { color: colors.muted }]}>Formula: {formula}</Text>
-      <Text style={[styles.engBreakTitle, { color: colors.darkText }]}>Interaction breakdown</Text>
+      <Text style={[styles.engFormula, { color: colors.muted }]}>{t.formula}: {formula}</Text>
+      <Text style={[styles.engBreakTitle, { color: colors.darkText }]}>{t.interactionBreakdown}</Text>
       {breakdown.map((b, i) => (
         <View key={i} style={styles.engBreakRow}>
           <View style={[styles.engBreakDot, { backgroundColor: b.color }]} />
           <Text style={[styles.engBreakLbl, { color: colors.muted }]}>{b.label}</Text>
-          <View style={[styles.engBreakBarTrack, { backgroundColor: colors.warmBg }]}>
+          <View style={[styles.engBreakBarTrack, { backgroundColor: `${colors.muted}15` }]}>
             <View style={[styles.engBreakBarFill, { width: Math.max(BREAK_BAR_W * b.pct / 100, b.pct > 0 ? 4 : 0), backgroundColor: b.color }]} />
           </View>
           <Text style={[styles.engBreakPct, { color: colors.darkText }]}>{b.pct}%</Text>
@@ -300,15 +299,15 @@ function EngagementSection({ a, colors }: { a: Analytics; colors: any }) {
   );
 }
 
-//period tabs
+// period tabs
 function PeriodTabs({ value, onChange, colors }: { value: Period; onChange: (p: Period) => void; colors: any }) {
   return (
-    <View style={[styles.periodWrap, { backgroundColor: colors.offwhite, borderColor: colors.border }]}>
+    <View style={[styles.periodWrap, { backgroundColor: `${colors.muted}10`, borderColor: `${colors.muted}20` }]}>
       {(['7d', '30d', '1y'] as Period[]).map(p => (
         <TouchableOpacity key={p}
-          style={[styles.periodTab, value === p && { backgroundColor: colors.card, elevation: 2 }]}
+          style={[styles.periodTab, value === p && { backgroundColor: colors.saffron }]}
           onPress={() => onChange(p)}>
-          <Text style={[styles.periodTxt, { color: value === p ? colors.darkText : colors.muted }]}>
+          <Text style={[styles.periodTxt, { color: value === p ? '#fff' : colors.muted }]}>
             {p === '7d' ? '7D' : p === '30d' ? '30D' : '1Y'}
           </Text>
         </TouchableOpacity>
@@ -317,30 +316,30 @@ function PeriodTabs({ value, onChange, colors }: { value: Period; onChange: (p: 
   );
 }
 
-//stat Card 
-function StatCard({ icon, label, value, color, sub, colors }: any) {
+//stat card
+function StatCard({ icon, label, value, color, sub }: any) {
   return (
-    <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={[styles.statIcon, { backgroundColor: `${color}15` }]}>
+    <View style={[styles.statCard, { backgroundColor: `${color}10`, borderColor: `${color}30` }]}>
+      <View style={[styles.statIcon, { backgroundColor: `${color}25` }]}>
         <Ionicons name={icon} size={20} color={color} />
       </View>
-      <Text style={[styles.statVal, { color: colors.darkText }]}>{fmtNum(value)}</Text>
-      <Text style={[styles.statLbl, { color: colors.muted }]}>{label}</Text>
-      {sub ? <Text style={[styles.statSub, { color }]}>{sub}</Text> : null}
+      <Text style={[styles.statVal, { color }]}>{fmtNum(value)}</Text>
+      <Text style={[styles.statLbl, { color }]}>{label}</Text>
+      {sub ? <Text style={[styles.statSub, { color, opacity: 0.75 }]}>{sub}</Text> : null}
     </View>
   );
 }
 
-//top post row
-function TopPostRow({ post, rank, colors }: { post: PostStat; rank: number; colors: any }) {
+//Top post row
+function TopPostRow({ post, rank, colors, t }: { post: PostStat; rank: number; colors: any; t: any }) {
   const medals: Record<number, string> = { 0: C.gold, 1: '#A8A8A8', 2: '#A0785A' };
   return (
-    <View style={[styles.topRow, { borderBottomColor: colors.border }]}>
-      <View style={[styles.topBadge, { backgroundColor: medals[rank] || colors.warmBg }]}>
+    <View style={[styles.topRow, { borderBottomColor: `${colors.muted}20` }]}>
+      <View style={[styles.topBadge, { backgroundColor: medals[rank] || `${colors.muted}30` }]}>
         <Text style={styles.topBadgeTxt}>{rank + 1}</Text>
       </View>
       <View style={styles.topInfo}>
-        <Text style={[styles.topTitle, { color: colors.darkText }]} numberOfLines={1}>{post.title || 'Untitled'}</Text>
+        <Text style={[styles.topTitle, { color: colors.darkText }]} numberOfLines={1}>{post.title || t.untitled}</Text>
         <View style={styles.topStats}>
           {[
             { icon: 'heart',              color: C.rose,   val: post.likes },
@@ -360,15 +359,15 @@ function TopPostRow({ post, rank, colors }: { post: PostStat; rank: number; colo
   );
 }
 
-//AI Tips 
-function AITips({ analytics, colors }: { analytics: Analytics; colors: any }) {
+//AI Tip
+function AITips({ analytics, colors, t }: { analytics: Analytics; colors: any; t: any }) {
   const [tips, setTips] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [generated, setGenerated] = useState(false);
   const [isAI, setIsAI] = useState(false);
   const [angle, setAngle] = useState('');
   const spinAnim = useRef(new Animated.Value(0)).current;
-  const { rate } = calcEngagement(analytics);
+  const { rate } = calcEngagement(analytics, t);
 
   const fetchTips = useCallback(async () => {
     setLoading(true); setGenerated(false);
@@ -423,7 +422,7 @@ Return ONLY valid JSON array: ["tip1","tip2","tip3","tip4","tip5"]`;
       ]);
     }
     setGenerated(true); setLoading(false); loop.stop();
-  }, [analytics]);
+  }, [analytics, t]);
 
   const spin = spinAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
@@ -432,8 +431,8 @@ Return ONLY valid JSON array: ["tip1","tip2","tip3","tip4","tip5"]`;
       <TouchableOpacity style={[styles.aiGenBtn, { backgroundColor: C.blue }]} onPress={fetchTips} activeOpacity={0.85}>
         <Ionicons name="sparkles-outline" size={20} color="#fff" />
         <View style={{ flex: 1 }}>
-          <Text style={styles.aiGenBtnTitle}>Generate AI Tips</Text>
-          <Text style={styles.aiGenBtnSub}>Personalized based on your exact stats</Text>
+          <Text style={styles.aiGenBtnTitle}>{t.generateAITips}</Text>
+          <Text style={styles.aiGenBtnSub}>{t.aiTipsSub}</Text>
         </View>
         <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.7)" />
       </TouchableOpacity>
@@ -447,8 +446,8 @@ Return ONLY valid JSON array: ["tip1","tip2","tip3","tip4","tip5"]`;
           <Ionicons name="sparkles-outline" size={24} color={C.blue} />
         </Animated.View>
         <View>
-          <Text style={[styles.aiLoadTitle, { color: colors.darkText }]}>Analyzing your stats...</Text>
-          <Text style={[styles.aiLoadSub, { color: colors.muted }]}>Focus: {angle}</Text>
+          <Text style={[styles.aiLoadTitle, { color: colors.darkText }]}>{t.analyzingStats}</Text>
+          <Text style={[styles.aiLoadSub, { color: colors.muted }]}>{t.focus}: {angle}</Text>
         </View>
       </View>
     );
@@ -456,29 +455,29 @@ Return ONLY valid JSON array: ["tip1","tip2","tip3","tip4","tip5"]`;
 
   return (
     <View>
-      <View style={[styles.aiBadge, { backgroundColor: isAI ? `${C.blue}12` : `${colors.muted}12` }]}>
+      <View style={[styles.aiBadge, { backgroundColor: isAI ? `${C.blue}15` : `${colors.muted}15` }]}>
         <Ionicons name={isAI ? 'sparkles' : 'information-circle-outline'} size={12} color={isAI ? C.blue : colors.muted} />
         <Text style={[styles.aiBadgeTxt, { color: isAI ? C.blue : colors.muted }]}>
-          {isAI ? `Focus: ${angle}` : 'Based on your stats'}
+          {isAI ? `${t.focus}: ${angle}` : t.basedOnStats}
         </Text>
       </View>
       {tips.map((tip, i) => (
-        <View key={i} style={[styles.aiTipRow, { borderBottomColor: i < tips.length - 1 ? colors.border : 'transparent' }]}>
+        <View key={i} style={[styles.aiTipRow, { borderBottomColor: i < tips.length - 1 ? `${colors.muted}20` : 'transparent' }]}>
           <View style={[styles.aiTipNum, { backgroundColor: C.blue }]}>
             <Text style={styles.aiTipNumTxt}>{i + 1}</Text>
           </View>
           <Text style={[styles.aiTipTxt, { color: colors.muted }]}>{tip}</Text>
         </View>
       ))}
-      <TouchableOpacity style={[styles.aiRegenBtn, { backgroundColor: `${C.blue}10`, borderColor: `${C.blue}35` }]} onPress={fetchTips} activeOpacity={0.8}>
+      <TouchableOpacity style={[styles.aiRegenBtn, { backgroundColor: `${C.blue}15`, borderColor: `${C.blue}40` }]} onPress={fetchTips} activeOpacity={0.8}>
         <Ionicons name="refresh-outline" size={15} color={C.blue} />
-        <Text style={[styles.aiRegenTxt, { color: C.blue }]}>Generate New Tips</Text>
+        <Text style={[styles.aiRegenTxt, { color: C.blue }]}>{t.generateNewTips}</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
-// main Screen 
+//main screen
 export default function AnalyticsScreen({ navigation }: any) {
   const { colors } = useTheme();
   const { t } = useLang();
@@ -519,13 +518,12 @@ export default function AnalyticsScreen({ navigation }: any) {
     finally { setLoading(false); setRefreshing(false); }
   }, [user]);
 
-  useEffect(() => { load(); }, [user]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
   useEffect(() => { if (allPosts.length > 0) setChart(buildChart(allPosts, period)); }, [period, allPosts]);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.offwhite }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.header, borderBottomColor: colors.border }]}>
+    <View style={[styles.container, { backgroundColor: colors.warmBg }]}>
+      <View style={[styles.header, { backgroundColor: colors.header, borderBottomColor: `${colors.muted}20` }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={colors.darkText} />
         </TouchableOpacity>
@@ -537,107 +535,137 @@ export default function AnalyticsScreen({ navigation }: any) {
 
       {loading ? (
         <View style={styles.loadWrap}>
-          <ActivityIndicator size="large" color={C.blue} />
-          <Text style={[styles.loadTxt, { color: colors.muted }]}>Loading analytics...</Text>
+          <ActivityIndicator size="large" color={colors.saffron} />
+          <Text style={[styles.loadTxt, { color: colors.muted }]}>{t.loadingAnalytics}</Text>
         </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} colors={[C.blue]} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} colors={[colors.saffron]} />}
           contentContainerStyle={{ paddingBottom: 40 }}>
 
-          {/* Profile banner */}
-          <View style={[styles.banner, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.bannerName, { color: colors.darkText }]}>{userProfile?.name || 'Artist'}</Text>
-            <Text style={[styles.bannerCat, { color: colors.muted }]}>{userProfile?.artistCategory || 'Folk Artist'}</Text>
-            <View style={styles.bannerRow}>
-              {[
-                { val: analytics?.totalPosts || 0, lbl: 'Posts',     color: C.teal },
-                { val: analytics?.followers  || 0, lbl: 'Followers', color: C.blue },
-                { val: analytics?.following  || 0, lbl: 'Following', color: C.violet },
-              ].map((item, i) => (
-                <React.Fragment key={i}>
-                  {i > 0 && <View style={[styles.bannerDiv, { backgroundColor: colors.border }]} />}
-                  <View style={styles.bannerStat}>
-                    <Text style={[styles.bannerVal, { color: item.color }]}>{fmtNum(item.val)}</Text>
-                    <Text style={[styles.bannerLbl, { color: colors.muted }]}>{item.lbl}</Text>
+          {/* Hero Profile Banner */}
+          <View style={[styles.hero, { backgroundColor: colors.saffron }]}>
+            <View style={styles.heroDecor1} />
+            <View style={styles.heroDecor2} />
+
+            <View style={styles.heroContent}>
+              <View style={styles.heroTop}>
+                {userProfile?.avatarUrl ? (
+                  <Image source={{ uri: userProfile.avatarUrl }} style={styles.heroAvatar} />
+                ) : (
+                  <View style={styles.heroAvatarInit}>
+                    <Text style={styles.heroAvatarInitTxt}>{initials(userProfile?.name || '')}</Text>
                   </View>
-                </React.Fragment>
-              ))}
+                )}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.heroName} numberOfLines={1}>{userProfile?.name || t.folkArtist}</Text>
+                  <View style={styles.heroCatRow}>
+                    <Ionicons name="color-palette-outline" size={12} color="rgba(255,255,255,0.85)" />
+                    <Text style={styles.heroCat} numberOfLines={1}>{userProfile?.artistCategory || t.folkArtist}</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.heroStats}>
+                {[
+                  { val: analytics?.totalPosts || 0, lbl: t.posts },
+                  { val: analytics?.followers  || 0, lbl: t.followers },
+                  { val: analytics?.following  || 0, lbl: t.following },
+                ].map((item, i) => (
+                  <React.Fragment key={i}>
+                    {i > 0 && <View style={styles.heroDiv} />}
+                    <View style={styles.heroStat}>
+                      <Text style={styles.heroVal}>{fmtNum(item.val)}</Text>
+                      <Text style={styles.heroLbl}>{item.lbl}</Text>
+                    </View>
+                  </React.Fragment>
+                ))}
+              </View>
             </View>
           </View>
 
           {/* Overview */}
-          <Text style={[styles.secLabel, { color: colors.muted }]}>OVERVIEW</Text>
+          <Text style={[styles.secLabel, { color: colors.muted }]}>{t.overview}</Text>
           <View style={styles.grid}>
             {[
-              { icon: 'heart',              label: 'Total Likes',  value: analytics?.totalLikes    || 0, color: C.rose,   sub: analytics?.totalPosts ? `${((analytics.totalLikes || 0)  / analytics.totalPosts).toFixed(1)} avg/post` : undefined },
-              { icon: 'eye-outline',        label: 'Total Views',  value: analytics?.totalViews    || 0, color: C.blue,   sub: analytics?.totalPosts ? `${((analytics.totalViews || 0)  / analytics.totalPosts).toFixed(0)} avg/post` : undefined },
-              { icon: 'chatbubble-outline', label: 'Comments',     value: analytics?.totalComments || 0, color: C.violet, sub: undefined },
-              { icon: 'bookmark',           label: 'Saves',        value: analytics?.totalBookmarks|| 0, color: C.teal,   sub: undefined },
-            ].map((item, i) => <StatCard key={i} {...item} colors={colors} />)}
+              { icon: 'heart',              label: t.totalLikes, value: analytics?.totalLikes    || 0, color: C.rose,   sub: analytics?.totalPosts ? `${((analytics.totalLikes || 0)  / analytics.totalPosts).toFixed(1)} ${t.avgPerPost}` : undefined },
+              { icon: 'eye-outline',        label: t.totalViews, value: analytics?.totalViews    || 0, color: C.blue,   sub: analytics?.totalPosts ? `${((analytics.totalViews || 0)  / analytics.totalPosts).toFixed(0)} ${t.avgPerPost}` : undefined },
+              { icon: 'chatbubble-outline', label: t.comments,   value: analytics?.totalComments || 0, color: C.violet, sub: undefined },
+              { icon: 'bookmark',           label: t.saves,      value: analytics?.totalBookmarks|| 0, color: C.teal,   sub: undefined },
+            ].map((item, i) => <StatCard key={i} {...item} />)}
           </View>
 
           {/* Engagement */}
-          <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.section, { backgroundColor: `${C.blue}08`, borderColor: `${C.blue}25` }]}>
             <View style={styles.secHead}>
-              <Ionicons name="pulse-outline" size={18} color={C.blue} />
-              <Text style={[styles.secHeadTxt, { color: colors.darkText }]}>Engagement Rate</Text>
+              <View style={[styles.secHeadIcon, { backgroundColor: `${C.blue}20` }]}>
+                <Ionicons name="pulse-outline" size={18} color={C.blue} />
+              </View>
+              <Text style={[styles.secHeadTxt, { color: colors.darkText }]}>{t.engagementRate}</Text>
             </View>
-            {analytics && <EngagementSection a={analytics} colors={colors} />}
+            {analytics && <EngagementSection a={analytics} colors={colors} t={t} />}
           </View>
 
           {/* Audience */}
-          <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={[styles.section, { backgroundColor: `${C.violet}08`, borderColor: `${C.violet}25` }]}>
             <View style={styles.secHead}>
-              <Ionicons name="people-outline" size={18} color={C.blue} />
-              <Text style={[styles.secHeadTxt, { color: colors.darkText }]}>Audience</Text>
+              <View style={[styles.secHeadIcon, { backgroundColor: `${C.violet}20` }]}>
+                <Ionicons name="people-outline" size={18} color={C.violet} />
+              </View>
+              <Text style={[styles.secHeadTxt, { color: colors.darkText }]}>{t.audience}</Text>
             </View>
-            {analytics && <FollowerChart followers={analytics.followers} following={analytics.following} colors={colors} />}
+            {analytics && <FollowerChart followers={analytics.followers} following={analytics.following} colors={colors} t={t} />}
           </View>
 
-          {/* Activity chart */}
-          <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={[styles.secHead, { justifyContent: 'space-between', marginBottom: 8 }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Ionicons name="trending-up-outline" size={18} color={C.blue} />
-                <Text style={[styles.secHeadTxt, { color: colors.darkText }]}>Activity</Text>
+          {/* Activity */}
+          <View style={[styles.section, { backgroundColor: `${C.teal}08`, borderColor: `${C.teal}25` }]}>
+            <View style={[styles.secHead, { justifyContent: 'space-between', marginBottom: 12 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={[styles.secHeadIcon, { backgroundColor: `${C.teal}20` }]}>
+                  <Ionicons name="trending-up-outline" size={18} color={C.teal} />
+                </View>
+                <Text style={[styles.secHeadTxt, { color: colors.darkText }]}>{t.activity}</Text>
               </View>
               <PeriodTabs value={period} onChange={setPeriod} colors={colors} />
             </View>
             <View style={styles.chartLegend}>
-              <View style={styles.legendItem}><View style={[styles.legendLine, { backgroundColor: C.rose }]} /><Text style={[styles.legendTxt, { color: colors.muted }]}>Likes</Text></View>
-              <View style={styles.legendItem}><View style={[styles.legendLine, { backgroundColor: C.blue }]} /><Text style={[styles.legendTxt, { color: colors.muted }]}>Views</Text></View>
+              <View style={styles.legendItem}><View style={[styles.legendLine, { backgroundColor: C.rose }]} /><Text style={[styles.legendTxt, { color: colors.muted }]}>{t.likesLabel}</Text></View>
+              <View style={styles.legendItem}><View style={[styles.legendLine, { backgroundColor: C.blue }]} /><Text style={[styles.legendTxt, { color: colors.muted }]}>{t.viewsLabel}</Text></View>
             </View>
             {chart && (
               <>
-                <Text style={[styles.chartSub, { color: C.rose }]}>Likes</Text>
-                <LineChart data={chart.likes} labels={chart.labels} color={C.rose} colors={colors} period={period} />
+                <Text style={[styles.chartSub, { color: C.rose }]}>{t.likesLabel}</Text>
+                <LineChart data={chart.likes} labels={chart.labels} color={C.rose} colors={colors} t={t} />
                 <View style={{ height: 18 }} />
-                <Text style={[styles.chartSub, { color: C.blue }]}>Views</Text>
-                <LineChart data={chart.views} labels={chart.labels} color={C.blue} colors={colors} period={period} />
+                <Text style={[styles.chartSub, { color: C.blue }]}>{t.viewsLabel}</Text>
+                <LineChart data={chart.views} labels={chart.labels} color={C.blue} colors={colors} t={t} />
               </>
             )}
           </View>
 
           {/* Top posts */}
           {(analytics?.topPosts || []).length > 0 && (
-            <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.section, { backgroundColor: `${C.gold}10`, borderColor: `${C.gold}30` }]}>
               <View style={styles.secHead}>
-                <Ionicons name="trophy-outline" size={18} color={C.gold} />
-                <Text style={[styles.secHeadTxt, { color: colors.darkText }]}>Top Posts</Text>
+                <View style={[styles.secHeadIcon, { backgroundColor: `${C.gold}25` }]}>
+                  <Ionicons name="trophy-outline" size={18} color={C.gold} />
+                </View>
+                <Text style={[styles.secHeadTxt, { color: colors.darkText }]}>{t.topPosts}</Text>
               </View>
-              {analytics!.topPosts.map((post, i) => <TopPostRow key={post.id} post={post} rank={i} colors={colors} />)}
+              {analytics!.topPosts.map((post, i) => <TopPostRow key={post.id} post={post} rank={i} colors={colors} t={t} />)}
             </View>
           )}
 
           {/* AI Tips */}
           {analytics && (
-            <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.section, { backgroundColor: `${C.blue}08`, borderColor: `${C.blue}25` }]}>
               <View style={styles.secHead}>
-                <Ionicons name="sparkles-outline" size={18} color={C.blue} />
-                <Text style={[styles.secHeadTxt, { color: colors.darkText }]}>AI Growth Tips</Text>
+                <View style={[styles.secHeadIcon, { backgroundColor: `${C.blue}20` }]}>
+                  <Ionicons name="sparkles-outline" size={18} color={C.blue} />
+                </View>
+                <Text style={[styles.secHeadTxt, { color: colors.darkText }]}>{t.aiGrowthTips}</Text>
               </View>
-              <AITips analytics={analytics} colors={colors} />
+              <AITips analytics={analytics} colors={colors} t={t} />
             </View>
           )}
 
@@ -647,41 +675,39 @@ export default function AnalyticsScreen({ navigation }: any) {
   );
 }
 
-
 const styles = StyleSheet.create({
-  // Layout
   container:      { flex: 1 },
   loadWrap:       { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   loadTxt:        { fontSize: 14 },
-
   header:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 52, paddingBottom: 14, borderBottomWidth: 0.5 },
   headerTitle:    { fontSize: 18, fontWeight: 'bold' },
-
-  // Banner
-  banner:         { margin: 16, borderRadius: 18, padding: 18, borderWidth: 0.5, gap: 4 },
-  bannerName:     { fontSize: 18, fontWeight: '800' },
-  bannerCat:      { fontSize: 13, marginBottom: 12 },
-  bannerRow:      { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  bannerStat:     { alignItems: 'center', flex: 1 },
-  bannerVal:      { fontSize: 20, fontWeight: '800' },
-  bannerLbl:      { fontSize: 11, marginTop: 1 },
-  bannerDiv:      { width: 1, height: 28 },
-
-  // Section
+  hero:               { margin: 16, borderRadius: 24, padding: 20, overflow: 'hidden', position: 'relative', elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 8 },
+  heroDecor1:         { position: 'absolute', top: -40, right: -40, width: 140, height: 140, borderRadius: 70, backgroundColor: 'rgba(255,255,255,0.12)' },
+  heroDecor2:         { position: 'absolute', bottom: -30, left: -30, width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(255,255,255,0.08)' },
+  heroContent:        { gap: 16 },
+  heroTop:            { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  heroAvatar:         { width: 60, height: 60, borderRadius: 30, borderWidth: 3, borderColor: 'rgba(255,255,255,0.6)' },
+  heroAvatarInit:     { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(255,255,255,0.25)', borderWidth: 3, borderColor: 'rgba(255,255,255,0.6)', justifyContent: 'center', alignItems: 'center' },
+  heroAvatarInitTxt:  { color: '#fff', fontSize: 24, fontWeight: '800' },
+  heroName:           { color: '#fff', fontSize: 20, fontWeight: '800' },
+  heroCatRow:         { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  heroCat:            { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '500' },
+  heroStats:          { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 14, padding: 14 },
+  heroStat:           { alignItems: 'center', flex: 1 },
+  heroVal:            { color: '#fff', fontSize: 22, fontWeight: '900' },
+  heroLbl:            { color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '600', marginTop: 2 },
+  heroDiv:            { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.3)' },
   secLabel:       { fontSize: 10, fontWeight: '700', letterSpacing: 1.2, marginHorizontal: 16, marginBottom: 10 },
-  section:        { marginHorizontal: 16, borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 0.5 },
-  secHead:        { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
+  section:        { marginHorizontal: 16, borderRadius: 20, padding: 18, marginBottom: 14, borderWidth: 1 },
+  secHead:        { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+  secHeadIcon:    { width: 34, height: 34, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
   secHeadTxt:     { fontSize: 15, fontWeight: '700' },
-
-  // Stats grid
   grid:           { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, gap: 12, marginBottom: 16 },
-  statCard:       { width: (width - 56) / 2, borderRadius: 16, padding: 16, gap: 4, borderWidth: 0.5 },
-  statIcon:       { width: 38, height: 38, borderRadius: 11, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
+  statCard:       { width: (width - 56) / 2, borderRadius: 18, padding: 16, gap: 4, borderWidth: 1 },
+  statIcon:       { width: 38, height: 38, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 4 },
   statVal:        { fontSize: 26, fontWeight: '800' },
-  statLbl:        { fontSize: 12 },
+  statLbl:        { fontSize: 12, fontWeight: '600' },
   statSub:        { fontSize: 10, fontWeight: '600', marginTop: 2 },
-
-  // Chart
   chartRow:       { flexDirection: 'row' },
   yAxis:          { width: 28, justifyContent: 'space-between', alignItems: 'flex-end', paddingRight: 4 },
   yLbl:           { fontSize: 8, fontWeight: '500' },
@@ -696,8 +722,6 @@ const styles = StyleSheet.create({
   legendLine:     { width: 16, height: 2, borderRadius: 1 },
   legendTxt:      { fontSize: 12 },
   chartSub:       { fontSize: 11, fontWeight: '700', marginBottom: 6 },
-
-  // Follower chart
   followerWrap:       { gap: 14 },
   followerTrack:      { height: 18, borderRadius: 9, flexDirection: 'row', overflow: 'hidden' },
   followerBarF:       { height: '100%', borderRadius: 9 },
@@ -711,8 +735,6 @@ const styles = StyleSheet.create({
   ratioSub:           { fontSize: 10 },
   followerInsight:    { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 10, borderRadius: 10, borderWidth: 1 },
   followerInsightTxt: { flex: 1, fontSize: 12, lineHeight: 18 },
-
-  // Engagement
   engWrap:          { gap: 14 },
   engRateRow:       { flexDirection: 'row', alignItems: 'flex-start', gap: 16 },
   engRateLeft:      { alignItems: 'flex-start', gap: 6 },
@@ -735,13 +757,9 @@ const styles = StyleSheet.create({
   engBreakBarFill:  { height: '100%', borderRadius: 3 },
   engBreakPct:      { fontSize: 12, fontWeight: '700', width: 32, textAlign: 'right' },
   engBreakVal:      { fontSize: 11 },
-
-  // Period tabs
   periodWrap: { flexDirection: 'row', borderRadius: 10, padding: 3, gap: 2, alignSelf: 'flex-start', borderWidth: 0.5 },
-  periodTab:  { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 8 },
-  periodTxt:  { fontSize: 13, fontWeight: '700' },
-
-  // Top posts
+  periodTab:  { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8 },
+  periodTxt:  { fontSize: 12, fontWeight: '700' },
   topRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 0.5 },
   topBadge:    { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
   topBadgeTxt: { color: '#fff', fontWeight: '800', fontSize: 12 },
@@ -751,8 +769,6 @@ const styles = StyleSheet.create({
   topStat:     { flexDirection: 'row', alignItems: 'center', gap: 3 },
   topStatTxt:  { fontSize: 11 },
   topTotal:    { fontSize: 13, fontWeight: '700' },
-
-  // AI Tips
   aiGenBtn:       { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: 14 },
   aiGenBtnTitle:  { color: '#fff', fontSize: 15, fontWeight: '700' },
   aiGenBtnSub:    { color: 'rgba(255,255,255,0.75)', fontSize: 12, marginTop: 2 },

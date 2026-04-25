@@ -10,16 +10,17 @@ import Video from 'react-native-video';
 import { useTheme } from '../../context/ThemeContext';
 import { useLang } from '../../context/LanguageContext';
 import { useAuthStore } from '../../store/authStore';
+import { COLORS } from '../../constants/colors';
 
 const { width } = Dimensions.get('window');
-const GRID_SIZE = (width - 4) / 3;
+const GRID_GAP = 2;
+const GRID_SIZE = (width - GRID_GAP * 4) / 3;
 
 function initials(name: string) { return (name || 'A').charAt(0).toUpperCase(); }
 
 const isVideoUrl = (url: string) =>
   url?.includes('/video/upload/') || url?.endsWith('.mp4') || url?.endsWith('.mov');
 
-//post media swiper for preview modal 
 function PostMediaSwiper({ post, colors }: { post: any; colors: any }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const flatRef = useRef<FlatList>(null);
@@ -50,21 +51,16 @@ function PostMediaSwiper({ post, colors }: { post: any; colors: any }) {
             : <Image source={{ uri: item.url }} style={{ width, height: width, backgroundColor: '#000' }} resizeMode="contain" />
         )}
       />
-
-      {/* Prev arrow */}
       {activeIndex > 0 && (
         <TouchableOpacity style={sw.arrowLeft} onPress={() => goTo(activeIndex - 1)}>
           <View style={sw.arrowBg}><Ionicons name="chevron-back" size={18} color="#fff" /></View>
         </TouchableOpacity>
       )}
-      {/* Next arrow */}
       {activeIndex < items.length - 1 && (
         <TouchableOpacity style={sw.arrowRight} onPress={() => goTo(activeIndex + 1)}>
           <View style={sw.arrowBg}><Ionicons name="chevron-forward" size={18} color="#fff" /></View>
         </TouchableOpacity>
       )}
-
-      {/* Dots / counter */}
       {items.length > 1 && (
         <View style={sw.dotsRow}>
           {items.length <= 8
@@ -92,7 +88,6 @@ const sw = StyleSheet.create({
   counterTxt: { color: '#fff', fontSize: 12, fontWeight: '600' },
 });
 
-// main screen
 export default function UserProfileScreen({ navigation, route }: any) {
   const { userId } = route.params;
   const { colors } = useTheme();
@@ -169,10 +164,10 @@ export default function UserProfileScreen({ navigation, route }: any) {
     ]);
   };
 
-  const renderGridItem = (post: any) => {
+  const renderGridItem = ({ item: post }: { item: any }) => {
     const hasMultiple = post.mediaItems && post.mediaItems.length > 1;
     return (
-      <TouchableOpacity key={post.id} style={styles.gridItem}
+      <TouchableOpacity style={styles.gridItem}
         onPress={() => setSelectedPost(post)}
         onLongPress={() => isOwnProfile && setPostMenuPost(post)}
         activeOpacity={0.85}>
@@ -183,7 +178,6 @@ export default function UserProfileScreen({ navigation, route }: any) {
         ) : (
           <Image source={{ uri: post.imageUrl }} style={styles.gridImg} resizeMode="cover" />
         )}
-        {/* multiple media badge */}
         {hasMultiple && (
           <View style={styles.multiMediaBadge}>
             <Ionicons name="copy-outline" size={11} color="#fff" />
@@ -210,13 +204,9 @@ export default function UserProfileScreen({ navigation, route }: any) {
     );
   };
 
-  return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.offwhite }]}
-      showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.saffron]} />}>
-
-      {/* Header */}
+  // header content for flatList
+  const renderHeader = () => (
+    <>
       <View style={[styles.header, { backgroundColor: colors.header }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={colors.darkText} />
@@ -231,7 +221,6 @@ export default function UserProfileScreen({ navigation, route }: any) {
         ) : <View style={{ width: 24 }} />}
       </View>
 
-      {/* Cover */}
       <View style={styles.cover}>
         {profile?.coverUrl
           ? <Image source={{ uri: profile.coverUrl }} style={styles.coverImg} />
@@ -239,7 +228,6 @@ export default function UserProfileScreen({ navigation, route }: any) {
         }
       </View>
 
-      {/* Profile Info */}
       <View style={[styles.profileSection, { backgroundColor: colors.card }]}>
         <View style={styles.avatarWrapper}>
           {profile?.avatarUrl
@@ -253,7 +241,6 @@ export default function UserProfileScreen({ navigation, route }: any) {
         <Text style={[styles.category, { color: colors.saffron }]}>{profile?.artistCategory || 'Folk Artist'}</Text>
         {profile?.bio ? <Text style={[styles.bio, { color: colors.muted }]}>{profile.bio}</Text> : null}
 
-        {/* Stats */}
         <View style={[styles.statsRow, { backgroundColor: colors.offwhite }]}>
           <View style={styles.statItem}>
             <Text style={[styles.statNum, { color: colors.darkText }]}>{posts.length}</Text>
@@ -273,7 +260,6 @@ export default function UserProfileScreen({ navigation, route }: any) {
           </TouchableOpacity>
         </View>
 
-        {/* Buttons */}
         {isOwnProfile ? (
           <View style={styles.actionButtons}>
             <TouchableOpacity style={[styles.editBtn, { backgroundColor: colors.saffron }]}
@@ -309,7 +295,6 @@ export default function UserProfileScreen({ navigation, route }: any) {
         )}
       </View>
 
-      {/* Tabs */}
       <View style={[styles.tabs, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'posts' && [styles.tabActive, { borderBottomColor: colors.saffron }]]}
@@ -325,32 +310,43 @@ export default function UserProfileScreen({ navigation, route }: any) {
         )}
       </View>
 
-      {/* Grid */}
-      {activeTab === 'posts' && (
-        posts.length > 0 ? (
-          <>
-            {isOwnProfile && <Text style={[styles.gridHint, { color: colors.muted }]}>Long press or tap ⋮ to manage posts</Text>}
-            <View style={styles.grid}>{posts.map(post => renderGridItem(post))}</View>
-          </>
-        ) : (
-          <View style={styles.emptyState}>
-            <Ionicons name="camera-outline" size={48} color={colors.muted} />
-            <Text style={[styles.emptyText, { color: colors.muted }]}>{t.noPostsYet}</Text>
-          </View>
-        )
+      {isOwnProfile && (
+        <Text style={[styles.gridHint, { color: colors.muted, backgroundColor: colors.offwhite }]}>
+          Long press or tap ⋮ to manage posts
+        </Text>
       )}
-      {activeTab === 'saved' && isOwnProfile && (
-        savedPosts.length > 0
-          ? <View style={styles.grid}>{savedPosts.map(post => renderGridItem(post))}</View>
-          : <View style={styles.emptyState}>
-              <Ionicons name="bookmark-outline" size={48} color={colors.muted} />
-              <Text style={[styles.emptyText, { color: colors.muted }]}>{t.noSavedPosts}</Text>
-            </View>
-      )}
+    </>
+  );
 
-      <View style={{ height: 40 }} />
+  // empty state
+  const renderEmpty = () => (
+    <View style={styles.emptyState}>
+      <Ionicons name={activeTab === 'posts' ? 'camera-outline' : 'bookmark-outline'} size={48} color={colors.muted} />
+      <Text style={[styles.emptyText, { color: colors.muted }]}>
+        {activeTab === 'posts' ? t.noPostsYet : t.noSavedPosts}
+      </Text>
+    </View>
+  );
 
-      {/*post Preview Modal with multi-image swiper */}
+  const dataToShow = activeTab === 'posts' ? posts : savedPosts;
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.offwhite }]}>
+      {/* flatList with numColumns=3 */}
+      <FlatList
+        data={dataToShow}
+        keyExtractor={(item) => item.id}
+        renderItem={renderGridItem}
+        numColumns={3}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderEmpty}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.saffron]} />}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        columnWrapperStyle={dataToShow.length > 0 ? styles.gridRow : undefined}
+      />
+
+      {/* Post preview modal */}
       <Modal visible={selectedPost !== null} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalSheet, { backgroundColor: colors.card }]}>
@@ -372,14 +368,12 @@ export default function UserProfileScreen({ navigation, route }: any) {
               </View>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Multi-image swiper */}
               {selectedPost && <PostMediaSwiper post={selectedPost} colors={colors} />}
-
               <View style={styles.modalInfo}>
                 {selectedPost?.title && <Text style={[styles.modalPostTitle, { color: colors.darkText }]}>{selectedPost.title}</Text>}
                 {selectedPost?.caption ? <Text style={[styles.modalCaption, { color: colors.muted }]}>{selectedPost.caption}</Text> : null}
                 {selectedPost?.techniques ? (
-                  <Text style={[styles.modalCaption, { color: colors.muted }]}>🔧 {selectedPost.techniques}</Text>
+                  <Text style={[styles.modalCaption, { color: colors.muted }]}>{selectedPost.techniques}</Text>
                 ) : null}
                 {selectedPost?.category && (
                   <View style={[styles.modalCategoryTag, { backgroundColor: colors.warmBg }]}>
@@ -405,7 +399,7 @@ export default function UserProfileScreen({ navigation, route }: any) {
         </View>
       </Modal>
 
-      {/* post Management */}
+      {/* Post Management*/}
       <Modal visible={postMenuPost !== null} animationType="slide" transparent>
         <Pressable style={styles.menuOverlay} onPress={() => setPostMenuPost(null)}>
           <Pressable style={[styles.menuSheet, { backgroundColor: colors.card }]}>
@@ -441,13 +435,21 @@ export default function UserProfileScreen({ navigation, route }: any) {
                 <Ionicons name="chevron-forward" size={16} color={item.icon === 'trash-outline' ? '#FF4444' : colors.muted} />
               </TouchableOpacity>
             ))}
-            <TouchableOpacity style={[styles.menuCancelBtn, { backgroundColor: colors.offwhite }]} onPress={() => setPostMenuPost(null)}>
-              <Text style={[styles.menuCancelTxt, { color: colors.darkText }]}>Cancel</Text>
+
+            {/* cancel button */}
+            <TouchableOpacity
+              style={styles.menuCancelBtn}
+              onPress={() => setPostMenuPost(null)}
+              activeOpacity={0.85}>
+              <View style={styles.menuCancelInner}>
+                <Ionicons name="close" size={18} color="#fff" />
+                <Text style={styles.menuCancelTxt}>Cancel</Text>
+              </View>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
       </Modal>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -482,8 +484,16 @@ const styles = StyleSheet.create({
   tab: { flex: 1, alignItems: 'center', paddingVertical: 14 },
   tabActive: { borderBottomWidth: 2 },
   gridHint: { fontSize: 11, textAlign: 'center', paddingVertical: 6 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 2, padding: 2 },
-  gridItem: { width: GRID_SIZE, height: GRID_SIZE, position: 'relative' },
+  gridRow: {
+    paddingHorizontal: GRID_GAP,
+    gap: GRID_GAP,
+    marginBottom: GRID_GAP,
+  },
+  gridItem: {
+    width: GRID_SIZE,
+    height: GRID_SIZE,
+    position: 'relative',
+  },
   gridImg: { width: '100%', height: '100%' },
   videoGridItem: { width: '100%', height: '100%', backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center' },
   videoGridBadge: { position: 'absolute', top: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 10, padding: 4 },
@@ -522,6 +532,25 @@ const styles = StyleSheet.create({
   menuItemText: { flex: 1 },
   menuItemTitle: { fontSize: 15, fontWeight: '600' },
   menuItemSub: { fontSize: 12, marginTop: 2 },
-  menuCancelBtn: { margin: 16, padding: 14, borderRadius: 14, alignItems: 'center' },
-  menuCancelTxt: { fontSize: 15, fontWeight: '600' },
+  menuCancelBtn: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    backgroundColor:COLORS.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuCancelInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  menuCancelTxt: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
 });
