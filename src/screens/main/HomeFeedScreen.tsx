@@ -12,8 +12,10 @@ import { useTheme } from '../../context/ThemeContext';
 import { useLang } from '../../context/LanguageContext';
 import { useAuthStore } from '../../store/authStore';
 
-const { width } = Dimensions.get('window');
+const { width, height: SH } = Dimensions.get('window');
 const CAPTION_LIMIT = 120;
+const CARD_WIDTH = width - 24;
+const GAP = 2;
 
 interface Post {
   id: string; userId: string; imageUrl: string;
@@ -35,147 +37,280 @@ interface Event {
   userName?: string; userAvatar?: string;
 }
 
-//helpers
 const isVideoUrl = (url: string) =>
   url?.includes('/video/upload/') || url?.endsWith('.mp4') || url?.endsWith('.mov');
 
 function initials(name: string) { return (name || 'A').charAt(0).toUpperCase(); }
 
-function formatEventDate(ts: any): string {
-  if (!ts) return '';
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-// card width
-const CARD_WIDTH = width - 24;
-
-// meadia swiper
-function MediaSwiper({ mediaItems, imageUrl, colors, visible }: {
-  mediaItems?: { url: string; type: 'image' | 'video' }[];
-  imageUrl: string; colors: any; visible: boolean;
+//full-screen media viewer 
+function MediaViewer({ items, initialIndex, visible, onClose }: {
+  items: { url: string; type: 'image' | 'video' }[];
+  initialIndex: number; visible: boolean; onClose: () => void;
 }) {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const flatListRef = useRef<FlatList>(null);
+  const [activeIndex, setActiveIndex] = useState(initialIndex);
+  const [videoPaused, setVideoPaused] = useState<Record<number, boolean>>({});
+  const flatRef = useRef<FlatList>(null);
 
-  const items = (mediaItems && mediaItems.length > 0)
-    ? mediaItems
-    : [{ url: imageUrl, type: (isVideoUrl(imageUrl) ? 'video' : 'image') as 'image' | 'video' }];
+  useEffect(() => {
+    if (visible) {
+      setActiveIndex(initialIndex);
+      // auto-play active video when viewer opens
+      const initPaused: Record<number, boolean> = {};
+      items.forEach((item, i) => {
+        initPaused[i] = i !== initialIndex;
+      });
+      setVideoPaused(initPaused);
+    }
+  }, [visible, initialIndex]);
 
-  const goTo = (idx: number) => {
-    if (idx < 0 || idx >= items.length) return;
-    flatListRef.current?.scrollToIndex({ index: idx, animated: true });
-    setActiveIndex(idx);
+  useEffect(() => {
+    // pause all others when active index changes
+    const newPaused: Record<number, boolean> = {};
+    items.forEach((item, i) => {
+      newPaused[i] = i !== activeIndex;
+    });
+    setVideoPaused(newPaused);
+  }, [activeIndex]);
+
+  const toggleVideo = (idx: number) => {
+    setVideoPaused(prev => ({ ...prev, [idx]: !prev[idx] }));
   };
 
-  const mediaStyle = { width: CARD_WIDTH, height: CARD_WIDTH };
-
-  if (items.length === 1) {
-    const item = items[0];
-    return item.type === 'video'
-      ? <Video source={{ uri: item.url }} style={mediaStyle} resizeMode="cover"
-          controls paused={!visible} repeat={false} />
-      : <Image source={{ uri: item.url }} style={mediaStyle} resizeMode="cover" />;
-  }
+  if (!visible) return null;
 
   return (
-    <View style={{ position: 'relative' }}>
-      <FlatList
-        ref={flatListRef}
-        data={items} horizontal pagingEnabled showsHorizontalScrollIndicator={false}
-        keyExtractor={(_, i) => String(i)}
-        getItemLayout={(_, i) => ({ length: CARD_WIDTH, offset: CARD_WIDTH * i, index: i })}
-        onMomentumScrollEnd={e => setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / CARD_WIDTH))}
-        renderItem={({ item, index }) => (
-          item.type === 'video'
-            ? <Video source={{ uri: item.url }} style={mediaStyle} resizeMode="cover"
-                controls paused={!(visible && index === activeIndex)} repeat={false} />
-            : <Image source={{ uri: item.url }} style={mediaStyle} resizeMode="cover" />
-        )}
-      />
-
-      {/* prev arrow */}
-      {activeIndex > 0 && (
-        <TouchableOpacity style={styles.swiperArrowLeft} onPress={() => goTo(activeIndex - 1)}>
-          <View style={styles.swiperArrowBg}>
-            <Ionicons name="chevron-back" size={18} color="#fff" />
-          </View>
-        </TouchableOpacity>
-      )}
-
-      {/* next arrow */}
-      {activeIndex < items.length - 1 && (
-        <TouchableOpacity style={styles.swiperArrowRight} onPress={() => goTo(activeIndex + 1)}>
-          <View style={styles.swiperArrowBg}>
-            <Ionicons name="chevron-forward" size={18} color="#fff" />
-          </View>
-        </TouchableOpacity>
-      )}
-
-      {/* dots & counter */}
-      <View style={styles.dotsRow}>
-        {items.length <= 6
-          ? items.map((_, i) => (
-              <View key={i} style={[styles.dot,
-                { backgroundColor: i === activeIndex ? colors.saffron : 'rgba(255,255,255,0.7)' },
-                i === activeIndex && styles.dotActive]} />
-            ))
-          : (
-            <View style={styles.counterBadge}>
-              <Text style={styles.counterText}>{activeIndex + 1} / {items.length}</Text>
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
+      <View style={vw.overlay}>
+        <View style={vw.topBar}>
+          <TouchableOpacity style={vw.closeBtn} onPress={onClose}>
+            <Ionicons name="close" size={28} color="#fff" />
+          </TouchableOpacity>
+          <Text style={vw.counter}>{activeIndex + 1} / {items.length}</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <FlatList
+          ref={flatRef}
+          data={items}
+          horizontal
+          pagingEnabled
+          initialScrollIndex={initialIndex}
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={(_, i) => String(i)}
+          getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
+          onMomentumScrollEnd={e => setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / width))}
+          renderItem={({ item, index }) => (
+            <View style={vw.mediaWrap}>
+              {item.type === 'video' ? (
+                <TouchableOpacity activeOpacity={1} style={{ width, height: SH * 0.85 }} onPress={() => toggleVideo(index)}>
+                  <Video
+                    source={{ uri: item.url }}
+                    style={vw.media}
+                    resizeMode="contain"
+                    controls
+                    paused={videoPaused[index] ?? true}
+                    repeat={false}
+                    onError={(e) => console.log('Video error:', e)}
+                    ignoreSilentSwitch="ignore"
+                  />
+                  {/* big play button overlay when paused */}
+                  {videoPaused[index] && (
+                    <View style={vw.playOverlay} pointerEvents="none">
+                      <View style={vw.playBtn}>
+                        <Ionicons name="play" size={42} color="#fff" />
+                      </View>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <Pressable style={{ width, height: SH * 0.85, justifyContent: 'center', alignItems: 'center' }} onPress={onClose}>
+                  <Image source={{ uri: item.url }} style={vw.media} resizeMode="contain" />
+                </Pressable>
+              )}
             </View>
-          )
-        }
+          )}
+        />
+      </View>
+    </Modal>
+  );
+}
+
+const vw = StyleSheet.create({
+  overlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.96)' },
+  topBar:      { position: 'absolute', top: 52, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, zIndex: 10 },
+  closeBtn:    { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
+  counter:     { color: '#fff', fontSize: 14, fontWeight: '600' },
+  mediaWrap:   { width, height: SH, justifyContent: 'center', alignItems: 'center' },
+  media:       { width, height: SH * 0.85 },
+  playOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
+  playBtn:     { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
+});
+
+// Grid
+function MediaGrid({ items, onPressItem }: {
+  items: { url: string; type: 'image' | 'video' }[];
+  onPressItem: (index: number) => void;
+}) {
+  const count = items.length;
+  const fullH = CARD_WIDTH;
+  const halfW = (CARD_WIDTH - GAP) / 2;
+
+  const renderItem = (item: { url: string; type: 'image' | 'video' }, w: number, h: number, idx: number, overlayCount?: number) => (
+    <TouchableOpacity
+      key={idx}
+      activeOpacity={0.9}
+      onPress={() => onPressItem(idx)}
+      style={{ width: w, height: h, position: 'relative', backgroundColor: '#000' }}>
+      {item.type === 'video' ? (
+        <View style={{ width: w, height: h }}>
+          <Video source={{ uri: item.url }} style={{ width: w, height: h }} resizeMode="cover" paused muted />
+          <View style={gs.videoIcon}>
+            <Ionicons name="play" size={28} color="#fff" />
+          </View>
+        </View>
+      ) : (
+        <Image source={{ uri: item.url }} style={{ width: w, height: h }} resizeMode="cover" />
+      )}
+      {overlayCount !== undefined && overlayCount > 0 && (
+        <View style={gs.overlayMore}>
+          <Text style={gs.overlayMoreTxt}>+{overlayCount}</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+
+  // 1 item
+  if (count === 1) return <View style={gs.grid}>{renderItem(items[0], CARD_WIDTH, fullH, 0)}</View>;
+
+  // 2 items(side by side)
+  if (count === 2) {
+    return (
+      <View style={[gs.grid, { flexDirection: 'row', gap: GAP }]}>
+        {renderItem(items[0], halfW, fullH, 0)}
+        {renderItem(items[1], halfW, fullH, 1)}
+      </View>
+    );
+  }
+
+  // 3 items (1 big left, 2 stacked right)
+  if (count === 3) {
+    const rightH = (fullH - GAP) / 2;
+    return (
+      <View style={[gs.grid, { flexDirection: 'row', gap: GAP }]}>
+        {renderItem(items[0], halfW, fullH, 0)}
+        <View style={{ gap: GAP }}>
+          {renderItem(items[1], halfW, rightH, 1)}
+          {renderItem(items[2], halfW, rightH, 2)}
+        </View>
+      </View>
+    );
+  }
+
+  // 4 items (1 big left, 3 stacked right)
+  if (count === 4) {
+    const rightH = (fullH - GAP * 2) / 3;
+    return (
+      <View style={[gs.grid, { flexDirection: 'row', gap: GAP }]}>
+        {renderItem(items[0], halfW, fullH, 0)}
+        <View style={{ gap: GAP }}>
+          {renderItem(items[1], halfW, rightH, 1)}
+          {renderItem(items[2], halfW, rightH, 2)}
+          {renderItem(items[3], halfW, rightH, 3)}
+        </View>
+      </View>
+    );
+  }
+
+  // 5+ items (1 big left, 2 top right + 2 bottom-right with +n overlay)
+  const rightH = (fullH - GAP) / 2;
+  const rightW = halfW;
+  const extra = count - 5;
+  return (
+    <View style={[gs.grid, { flexDirection: 'row', gap: GAP }]}>
+      {renderItem(items[0], halfW, fullH, 0)}
+      <View style={{ gap: GAP }}>
+        <View style={{ flexDirection: 'row', gap: GAP }}>
+          {renderItem(items[1], (rightW - GAP) / 2, rightH, 1)}
+          {renderItem(items[2], (rightW - GAP) / 2, rightH, 2)}
+        </View>
+        <View style={{ flexDirection: 'row', gap: GAP }}>
+          {renderItem(items[3], (rightW - GAP) / 2, rightH, 3)}
+          {renderItem(items[4], (rightW - GAP) / 2, rightH, 4, extra)}
+        </View>
       </View>
     </View>
   );
 }
 
-function CaptionText({ caption, techniques, colors }: { caption: string; techniques?: string; colors: any }) {
-  const [exp, setExp] = useState(false);
+const gs = StyleSheet.create({
+  grid:           { width: CARD_WIDTH, backgroundColor: '#000' },
+  videoIcon:      { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.25)' },
+  overlayMore:    { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  overlayMoreTxt: { color: '#fff', fontSize: 28, fontWeight: '800' },
+});
 
-  const parts: string[] = [];
-  if (caption) parts.push(caption);
-  if (techniques) parts.push(`🔧 ${techniques}`);
-  const fullText = parts.join('\n');
-
-  if (!fullText) return null;
-
-  const isLong = fullText.length > CAPTION_LIMIT;
-  const shown = exp ? fullText : fullText.slice(0, CAPTION_LIMIT);
+function PostDetails({ title, userName, caption, techniques, colors }: {
+  title: string; userName: string; caption: string; techniques?: string; colors: any;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const hasMore = !!(caption || techniques);
 
   return (
-    <Text style={[styles.captionDesc, { color: colors.muted }]}>
-      {shown}
-      {isLong && !exp && (
-        <Text onPress={() => setExp(true)} style={{ color: colors.saffron, fontWeight: '600' }}>
-          {'... '}read more
-        </Text>
+    <View>
+      {/* title line */}
+      {title ? (
+        <View style={styles.titleRow}>
+          <Text style={[styles.titleUser, { color: colors.darkText }]}>{userName} </Text>
+          <Text style={[styles.titleText, { color: colors.darkText }]}>{title}</Text>
+        </View>
+      ) : null}
+
+      {/* Show more button */}
+      {hasMore && !expanded && (
+        <TouchableOpacity onPress={() => setExpanded(true)} style={styles.showMoreBtn}>
+          <Text style={[styles.showMoreTxt, { color: colors.saffron }]}>Show more</Text>
+          <Ionicons name="chevron-down" size={14} color={colors.saffron} />
+        </TouchableOpacity>
       )}
-      {isLong && exp && (
-        <Text onPress={() => setExp(false)} style={{ color: colors.saffron, fontWeight: '600' }}>
-          {' '}show less
-        </Text>
+
+      {/* Expanded content */}
+      {expanded && (
+        <View style={styles.expandedWrap}>
+          {caption ? (
+            <Text style={[styles.descTxt, { color: colors.muted }]}>{caption}</Text>
+          ) : null}
+          {techniques ? (
+            <View style={styles.techRow}>
+              <View style={[styles.techBadge, { backgroundColor: `${colors.saffron}18` }]}>
+                <Ionicons name="construct-outline" size={11} color={colors.saffron} />
+                <Text style={[styles.techLabel, { color: colors.saffron }]}>Techniques</Text>
+              </View>
+              <Text style={[styles.techTxt, { color: colors.muted }]}>{techniques}</Text>
+            </View>
+          ) : null}
+          <TouchableOpacity onPress={() => setExpanded(false)} style={styles.showMoreBtn}>
+            <Text style={[styles.showMoreTxt, { color: colors.saffron }]}>Show less</Text>
+            <Ionicons name="chevron-up" size={14} color={colors.saffron} />
+          </TouchableOpacity>
+        </View>
       )}
-    </Text>
+    </View>
   );
 }
 
-// event bar
+// events bar
 const CATEGORY_META: Record<string, { icon: string; grad: [string, string] }> = {
-  'Exhibition': { icon: 'color-palette-outline',  grad: ['#D4651A', '#8B3A1A'] },
-  'Workshop':   { icon: 'construct-outline',       grad: ['#1A6B5C', '#2D5016'] },
-  'Festival':   { icon: 'musical-notes-outline',   grad: ['#7B3FA0', '#4A1A6B'] },
-  'Concert':    { icon: 'mic-outline',             grad: ['#1A4D8B', '#0D2B4F'] },
-  'Cultural':   { icon: 'globe-outline',           grad: ['#B8860B', '#7A5800'] },
-  'Competition':{ icon: 'trophy-outline',          grad: ['#C4834A', '#8B3A1A'] },
-  'Craft Fair': { icon: 'basket-outline',          grad: ['#2D8B5C', '#1A5C3A'] },
-  'default':    { icon: 'calendar-outline',        grad: ['#D4651A', '#8B3A1A'] },
+  'Exhibition':  { icon: 'color-palette-outline', grad: ['#D4651A', '#8B3A1A'] },
+  'Workshop':    { icon: 'construct-outline',     grad: ['#1A6B5C', '#2D5016'] },
+  'Festival':    { icon: 'musical-notes-outline', grad: ['#7B3FA0', '#4A1A6B'] },
+  'Concert':     { icon: 'mic-outline',           grad: ['#1A4D8B', '#0D2B4F'] },
+  'Cultural':    { icon: 'globe-outline',         grad: ['#B8860B', '#7A5800'] },
+  'Competition': { icon: 'trophy-outline',        grad: ['#C4834A', '#8B3A1A'] },
+  'Craft Fair':  { icon: 'basket-outline',        grad: ['#2D8B5C', '#1A5C3A'] },
+  'default':     { icon: 'calendar-outline',      grad: ['#D4651A', '#8B3A1A'] },
 };
 
 function EventsBar({ navigation, colors, currentUserId }: { navigation: any; colors: any; currentUserId?: string }) {
   const [events, setEvents] = useState<Event[]>([]);
-
   useEffect(() => {
     firestore().collection('events').orderBy('date', 'asc').limit(15).get()
       .then(snap => {
@@ -188,10 +323,7 @@ function EventsBar({ navigation, colors, currentUserId }: { navigation: any; col
         })).then(setEvents);
       }).catch(() => { });
   }, []);
-
   if (events.length === 0) return null;
-
-  // parse day & month separately
   const parseDate = (ts: any) => {
     if (!ts) return { day: '', month: '' };
     const d = ts.toDate ? ts.toDate() : new Date(ts);
@@ -203,21 +335,17 @@ function EventsBar({ navigation, colors, currentUserId }: { navigation: any; col
 
   return (
     <View style={[styles.eventsSection, { borderBottomColor: colors.border }]}>
-      {/* Header */}
       <View style={styles.eventsSectionHeader}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <View style={[styles.eventsHeaderDot, { backgroundColor: colors.saffron }]} />
           <Text style={[styles.eventsSectionTitle, { color: colors.darkText }]}>Upcoming Events</Text>
         </View>
-        <TouchableOpacity
-          style={[styles.seeAllBtn, { borderColor: colors.saffron }]}
+        <TouchableOpacity style={[styles.seeAllBtn, { borderColor: colors.saffron }]}
           onPress={() => navigation.navigate('EventDetail', { showAll: true })}>
           <Text style={[styles.seeAllTxt, { color: colors.saffron }]}>See all</Text>
           <Ionicons name="arrow-forward" size={12} color={colors.saffron} />
         </TouchableOpacity>
       </View>
-
-      {/* Cards */}
       <FlatList
         data={events} horizontal showsHorizontalScrollIndicator={false}
         keyExtractor={e => e.id}
@@ -228,15 +356,10 @@ function EventsBar({ navigation, colors, currentUserId }: { navigation: any; col
           const interestedCount = (item.interestedUsers || []).length;
           const iAmInterested = (item.interestedUsers || []).includes(currentUserId || '');
           const { day, month } = parseDate(item.date);
-
           return (
-            <TouchableOpacity
-              style={styles.eventCard}
-              onPress={() => navigation.navigate('EventDetail', { event: item })}
-              activeOpacity={0.88}>
-
+            <TouchableOpacity style={styles.eventCard}
+              onPress={() => navigation.navigate('EventDetail', { event: item })} activeOpacity={0.88}>
               <View style={[styles.eventCardBg, { backgroundColor: meta.grad[1] }]}>
-                {/* background */}
                 {item.imageUrl ? (
                   <Image source={{ uri: item.imageUrl }} style={styles.eventCardBgImg} />
                 ) : (
@@ -244,14 +367,11 @@ function EventsBar({ navigation, colors, currentUserId }: { navigation: any; col
                     <Ionicons name={meta.icon as any} size={56} color="rgba(255,255,255,0.55)" />
                   </View>
                 )}
-
                 <View style={styles.eventCardGradient} />
-
                 <View style={[styles.eventDatePill, { backgroundColor: meta.grad[0] }]}>
                   <Text style={styles.eventDateDay}>{day}</Text>
                   <Text style={styles.eventDateMonth}>{month}</Text>
                 </View>
-
                 <View style={styles.eventTopRight}>
                   {isOrganizer && (
                     <View style={[styles.organizerBadge, { backgroundColor: meta.grad[0] }]}>
@@ -265,8 +385,6 @@ function EventsBar({ navigation, colors, currentUserId }: { navigation: any; col
                     </View>
                   )}
                 </View>
-
-                {/*bottom content */}
                 <View style={styles.eventCardBottom}>
                   <View style={styles.eventCatTag}>
                     <Ionicons name={meta.icon as any} size={10} color="#fff" />
@@ -277,15 +395,10 @@ function EventsBar({ navigation, colors, currentUserId }: { navigation: any; col
                     <Ionicons name="location-outline" size={11} color="rgba(255,255,255,0.9)" />
                     <Text style={styles.eventCardLoc} numberOfLines={1}>{item.location || 'TBA'}</Text>
                   </View>
-                  {/* Interested count — show only to organizer OR if > 0 */}
                   {(isOrganizer || interestedCount > 0) && (
                     <View style={styles.eventInterestedRow}>
                       <Ionicons name="star-outline" size={11} color="rgba(255,255,255,0.9)" />
-                      <Text style={styles.eventInterestedCountTxt}>
-                        {isOrganizer
-                          ? `${interestedCount} interested`
-                          : `${interestedCount} interested`}
-                      </Text>
+                      <Text style={styles.eventInterestedCountTxt}>{interestedCount} interested</Text>
                     </View>
                   )}
                 </View>
@@ -314,15 +427,16 @@ export default function HomeFeedScreen({ navigation }: any) {
   const [followingList, setFollowingList] = useState<string[]>([]);
   const [replyingTo, setReplyingTo] = useState<{ id: string; userName: string } | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [visiblePostIds, setVisiblePostIds] = useState<Set<string>>(new Set());
 
-  // notification badge listner
+  // Viewer state
+  const [viewerItems, setViewerItems] = useState<{ url: string; type: 'image' | 'video' }[]>([]);
+  const [viewerIndex, setViewerIndex] = useState(0);
+  const [viewerVisible, setViewerVisible] = useState(false);
+
   useEffect(() => {
     if (!user?.uid) return;
-    const unsub = firestore()
-      .collection('notifications')
-      .where('toUserId', '==', user.uid)
-      .where('read', '==', false)
+    const unsub = firestore().collection('notifications')
+      .where('toUserId', '==', user.uid).where('read', '==', false)
       .onSnapshot(snap => setUnreadCount(snap.size), () => { });
     return () => unsub();
   }, [user]);
@@ -353,15 +467,8 @@ export default function HomeFeedScreen({ navigation }: any) {
   }, [user]);
 
   useEffect(() => { fetchPosts(); fetchFollowing(); }, []);
-
   const onRefresh = async () => { setRefreshing(true); await fetchPosts(); await fetchFollowing(); setRefreshing(false); };
 
-  const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
-    setVisiblePostIds(new Set(viewableItems.map((v: any) => v.item.id)));
-  }, []);
-  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 60 }).current;
-
-  // views &  milestone
   const incrementViews = async (postId: string, postUserId: string) => {
     if (!user?.uid || postUserId === user.uid) return;
     try {
@@ -378,6 +485,16 @@ export default function HomeFeedScreen({ navigation }: any) {
         });
       }
     } catch { }
+  };
+
+  const openViewer = (post: Post, index: number) => {
+    const items = (post.mediaItems && post.mediaItems.length > 0)
+      ? post.mediaItems
+      : [{ url: post.imageUrl, type: (isVideoUrl(post.imageUrl) ? 'video' : 'image') as 'image' | 'video' }];
+    setViewerItems(items);
+    setViewerIndex(index);
+    setViewerVisible(true);
+    incrementViews(post.id, post.userId);
   };
 
   const handleLike = async (post: Post) => {
@@ -399,7 +516,7 @@ export default function HomeFeedScreen({ navigation }: any) {
           read: false, createdAt: firestore.FieldValue.serverTimestamp(),
         });
       }
-    } catch (e) { fetchPosts(); }
+    } catch { fetchPosts(); }
   };
 
   const handleBookmark = async (post: Post) => {
@@ -455,7 +572,6 @@ export default function HomeFeedScreen({ navigation }: any) {
     const replyToUser = replyingTo?.userName || null;
     const replyToId = replyingTo?.id || null;
     setCommentText(''); setReplyingTo(null);
-
     const tempId = `temp_${Date.now()}`;
     const tempComment: Comment = {
       id: tempId, userId: user.uid,
@@ -472,7 +588,6 @@ export default function HomeFeedScreen({ navigation }: any) {
       await firestore().collection('posts').doc(commentPost.id).update({ commentCount: firestore.FieldValue.increment(1) });
       setComments(prev => prev.map(c => c.id === tempId ? { ...c, id: ref.id } : c));
       setPosts(prev => prev.map(p => p.id === commentPost.id ? { ...p, commentCount: (p.commentCount || 0) + 1 } : p));
-
       if (commentPost.userId !== user.uid) {
         await firestore().collection('notifications').add({
           toUserId: commentPost.userId, fromUserId: user.uid,
@@ -515,10 +630,19 @@ export default function HomeFeedScreen({ navigation }: any) {
     const isFollowing = followingList.includes(item.userId);
     const isOwnPost = item.userId === user?.uid;
     const savedCount = item.bookmarks?.length || 0;
-    const isVisible = visiblePostIds.has(item.id);
+
+    const mediaItems = (item.mediaItems && item.mediaItems.length > 0)
+      ? item.mediaItems
+      : [{ url: item.imageUrl, type: (isVideoUrl(item.imageUrl) ? 'video' : 'image') as 'image' | 'video' }];
 
     return (
-      <View style={[styles.postCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={[styles.postCard, {
+        backgroundColor: colors.card,
+        borderColor: `${colors.saffron}20`,
+        shadowColor: colors.saffron,
+      }]}>
+        {/* Subtle top accent band */}
+        <View style={[styles.cardAccent, { backgroundColor: `${colors.saffron}08` }]} />
         {/* Header */}
         <TouchableOpacity style={styles.postHeader} activeOpacity={0.85}
           onPress={() => { incrementViews(item.id, item.userId); navigation.navigate('UserProfile', { userId: item.userId }); }}>
@@ -543,12 +667,10 @@ export default function HomeFeedScreen({ navigation }: any) {
           )}
         </TouchableOpacity>
 
-        {/* media swiper */}
-        <TouchableOpacity activeOpacity={1} onPress={() => incrementViews(item.id, item.userId)}>
-          <MediaSwiper mediaItems={item.mediaItems} imageUrl={item.imageUrl} colors={colors} visible={isVisible} />
-        </TouchableOpacity>
+        {/*media grid */}
+        <MediaGrid items={mediaItems} onPressItem={(idx) => openViewer(item, idx)} />
 
-        {/* Actions */}
+        {/* actions */}
         <View style={styles.postActions}>
           <View style={styles.postActionsLeft}>
             <TouchableOpacity style={styles.actionBtn} onPress={() => handleLike(item)}>
@@ -571,25 +693,23 @@ export default function HomeFeedScreen({ navigation }: any) {
           </View>
         </View>
 
-        {/* Likes */}
         {(item.likes || []).length > 0 && (
           <Text style={[styles.likesCount, { color: colors.darkText }]}>
             {item.likes.length} {item.likes.length > 1 ? t.likes : t.like}
           </Text>
         )}
 
-        {/* Title below likes */}
-        {item.title ? (
-          <View style={styles.captionRow}>
-            <Text style={[styles.captionUser, { color: colors.darkText }]}>{item.userName} </Text>
-            <Text style={[styles.captionTitle, { color: colors.darkText }]}>{item.title}</Text>
+        {item.title || item.caption || item.techniques ? (
+          <View style={styles.detailsWrap}>
+            <PostDetails
+              title={item.title}
+              userName={item.userName || ''}
+              caption={item.caption}
+              techniques={item.techniques}
+              colors={colors}
+            />
           </View>
         ) : null}
-
-        {/*techniques &read more */}
-        <View style={styles.captionWrap}>
-          <CaptionText caption={item.caption} techniques={item.techniques} colors={colors} />
-        </View>
 
         {item.category && (
           <View style={styles.categoryTag}>
@@ -612,11 +732,10 @@ export default function HomeFeedScreen({ navigation }: any) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.warmBg }]}>
-      {/* Header */}
+      {/*header */}
       <View style={[styles.header, { backgroundColor: colors.header, borderBottomColor: colors.border }]}>
         <Text style={[styles.logo, { color: colors.saffron }]}>Folk<Text style={{ color: colors.darkText }}>Chat</Text></Text>
         <View style={styles.headerRight}>
-          {/* bell with badge */}
           <TouchableOpacity style={styles.notifBtn} onPress={() => navigation.navigate('Notifications')}>
             <Ionicons name="notifications-outline" size={24} color={colors.darkText} />
             {unreadCount > 0 && (
@@ -636,15 +755,12 @@ export default function HomeFeedScreen({ navigation }: any) {
         </View>
       </View>
 
-      {/* feed with Events at top */}
       <FlatList
         data={posts}
         keyExtractor={item => item.id}
         renderItem={renderPost}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: 10, paddingBottom: 20 }}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.saffron]} />}
         ListHeaderComponent={<EventsBar navigation={navigation} colors={colors} currentUserId={user?.uid} />}
         ListEmptyComponent={
@@ -656,7 +772,10 @@ export default function HomeFeedScreen({ navigation }: any) {
         }
       />
 
-      {/* Comments Modal */}
+      {/*full-screen media viewer */}
+      <MediaViewer items={viewerItems} initialIndex={viewerIndex} visible={viewerVisible} onClose={() => setViewerVisible(false)} />
+
+      {/* comments modal */}
       <Modal visible={commentPost !== null} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <Pressable style={styles.commentOverlay} onPress={() => { setCommentPost(null); setReplyingTo(null); }}>
@@ -730,7 +849,7 @@ export default function HomeFeedScreen({ navigation }: any) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* dropdown */}
+      {/*dropdown */}
       <Modal visible={showDropdown} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setShowDropdown(false)}>
           <View style={[styles.dropdown, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -783,8 +902,7 @@ const styles = StyleSheet.create({
   eventCardBg: { flex: 1, position: 'relative' },
   eventCardBgImg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%', resizeMode: 'cover' },
   eventCardNoBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
-  eventCardGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 120, backgroundColor: 'transparent', borderBottomLeftRadius: 18, borderBottomRightRadius: 18,
-  },
+  eventCardGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 120, backgroundColor: 'transparent', borderBottomLeftRadius: 18, borderBottomRightRadius: 18 },
   eventDatePill: { position: 'absolute', top: 12, left: 12, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 5, alignItems: 'center', minWidth: 38 },
   eventDateDay: { color: '#fff', fontSize: 16, fontWeight: '900', lineHeight: 18 },
   eventDateMonth: { color: 'rgba(255,255,255,0.85)', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
@@ -800,7 +918,8 @@ const styles = StyleSheet.create({
   eventCardLoc: { color: 'rgba(255,255,255,0.85)', fontSize: 10, flex: 1 },
   eventInterestedRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 },
   eventInterestedCountTxt: { color: 'rgba(255,255,255,0.85)', fontSize: 10 },
-  postCard: { marginBottom: 12, marginHorizontal: 12, borderRadius: 16, borderWidth: 1, overflow: 'hidden', elevation: 2 },
+  postCard: { marginBottom: 12, marginHorizontal: 12, borderRadius: 18, borderWidth: 0.5, overflow: 'hidden', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
+  cardAccent: { position: 'absolute', top: 0, left: 0, right: 0, height: 90 },
   postHeader: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10 },
   postAvatar: { width: 42, height: 42, borderRadius: 21 },
   postAvatarInit: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
@@ -809,25 +928,25 @@ const styles = StyleSheet.create({
   postUserCat: { fontSize: 12 },
   followBtn: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 5 },
   followBtnTxt: { fontSize: 13, fontWeight: '600' },
-  dotsRow: { position: 'absolute', bottom: 10, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 5 },
-  dot: { width: 6, height: 6, borderRadius: 3 },
-  dotActive: { width: 18 },
-  swiperArrowLeft: { position: 'absolute', left: 10, top: '50%', marginTop: -16, zIndex: 10 },
-  swiperArrowRight: { position: 'absolute', right: 10, top: '50%', marginTop: -16, zIndex: 10 },
-  swiperArrowBg: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' },
-  counterBadge: { backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
-  counterText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   postActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 },
   postActionsLeft: { flexDirection: 'row', gap: 18 },
   actionBtn: { padding: 2 },
   bookmarkRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   savedCount: { fontSize: 12, fontWeight: '600' },
-  likesCount: { paddingHorizontal: 14, fontSize: 13, fontWeight: 'bold', marginBottom: 2 },
-  captionRow: { flexDirection: 'row', paddingHorizontal: 14, paddingTop: 2, flexWrap: 'wrap' },
-  captionUser: { fontSize: 13, fontWeight: 'bold' },
-  captionTitle: { fontSize: 13 },
-  captionWrap: { paddingHorizontal: 14 },
-  captionDesc: { fontSize: 13, lineHeight: 20, marginTop: 2 },
+  likesCount: { paddingHorizontal: 14, fontSize: 13, fontWeight: 'bold', marginBottom: 4 },
+
+  detailsWrap: { paddingHorizontal: 14, paddingTop: 2 },
+  titleRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' },
+  titleUser: { fontSize: 13, fontWeight: 'bold' },
+  titleText: { fontSize: 13, fontWeight: '600' },
+  showMoreBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start', marginTop: 4, paddingVertical: 2 },
+  showMoreTxt: { fontSize: 12, fontWeight: '700' },
+  expandedWrap: { marginTop: 6, gap: 8 },
+  descTxt: { fontSize: 13, lineHeight: 20 },
+  techRow: { gap: 6 },
+  techBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 },
+  techLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
+  techTxt: { fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
   categoryTag: { paddingHorizontal: 14, paddingVertical: 4 },
   categoryTagTxt: { fontSize: 12, fontWeight: '500' },
   viewComments: { paddingHorizontal: 14, fontSize: 13, marginBottom: 2 },
