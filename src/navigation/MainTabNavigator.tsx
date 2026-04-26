@@ -101,10 +101,10 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
       {/* Bar background with curved top corners */}
       <View style={[s.bar, {
         backgroundColor: isDark ? colors.tabBar : '#F5E6CC', 
-        borderColor: isDark ? colors.saffron : 'transparent',
-        borderTopWidth: isDark ? 1.5 : 0,
-        borderLeftWidth: isDark ? 1.5 : 0,
-        borderRightWidth: isDark ? 1.5 : 0,
+        borderColor: isDark ? colors.saffron : 'white',
+        borderTopWidth: 1.5,     
+        borderLeftWidth: 1.5,
+        borderRightWidth: 1.5,
       }]}>
         {/* Left side */}
         <View style={s.side}>
