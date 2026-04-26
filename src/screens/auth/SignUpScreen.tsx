@@ -68,7 +68,7 @@ export default function SignUpScreen({ navigation }: any) {
 
   //Gradients
   const fullGradient = isDark
-    ? ['#1A1008', '#2A1C0E', '#3A2814', '#4A341C']   // deep dark warm brown
+    ? ['#1A1008', '#2A1C0E', '#3A2814', '#4A341C']   
     : ['#FFC58A', '#FFD9A8', '#FFEAC8', '#FFF6E5'];
 
   //Input colours
@@ -268,6 +268,9 @@ export default function SignUpScreen({ navigation }: any) {
               underlineColorAndroid="transparent"
               selectionColor="#D4651A"
             />
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color={mutedColor} />
+            </TouchableOpacity>
           </View>
           {errors.confirmPassword && <Text style={styles.errorField}>{errors.confirmPassword}</Text>}
 

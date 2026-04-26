@@ -4,6 +4,7 @@ import {
   ScrollView, RefreshControl, ActivityIndicator,
   Dimensions, Animated, Image,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import firestore from '@react-native-firebase/firestore';
 import { useFocusEffect } from '@react-navigation/native';
@@ -100,7 +101,7 @@ function buildChart(posts: PostStat[], period: Period) {
   return { likes, views, labels: Array.from({ length: buckets }, (_, i) => labelFn(i)) };
 }
 
-//line Chart 
+// line Chart
 function LineChart({ data, labels, color, colors, t }: {
   data: number[]; labels: string[]; color: string; colors: any; t: any;
 }) {
@@ -189,7 +190,7 @@ function LineChart({ data, labels, color, colors, t }: {
   );
 }
 
-// follower Chart 
+// follower Chart
 function FollowerChart({ followers, following, colors, t }: { followers: number; following: number; colors: any; t: any }) {
   const BAR_W = width - 64 - 40;
   const anim = useRef(new Animated.Value(0)).current;
@@ -238,7 +239,7 @@ function FollowerChart({ followers, following, colors, t }: { followers: number;
   );
 }
 
-//engagement Section 
+// engagement Section
 function EngagementSection({ a, colors, t }: { a: Analytics; colors: any; t: any }) {
   const { rate, formula, label, color } = calcEngagement(a, t);
   const interactions = a.totalLikes + a.totalComments + a.totalBookmarks;
@@ -316,7 +317,7 @@ function PeriodTabs({ value, onChange, colors }: { value: Period; onChange: (p: 
   );
 }
 
-//stat card
+// stat card
 function StatCard({ icon, label, value, color, sub }: any) {
   return (
     <View style={[styles.statCard, { backgroundColor: `${color}10`, borderColor: `${color}30` }]}>
@@ -330,7 +331,7 @@ function StatCard({ icon, label, value, color, sub }: any) {
   );
 }
 
-//Top post row
+// top post row
 function TopPostRow({ post, rank, colors, t }: { post: PostStat; rank: number; colors: any; t: any }) {
   const medals: Record<number, string> = { 0: C.gold, 1: '#A8A8A8', 2: '#A0785A' };
   return (
@@ -359,7 +360,7 @@ function TopPostRow({ post, rank, colors, t }: { post: PostStat; rank: number; c
   );
 }
 
-//AI Tip
+// AI Tips
 function AITips({ analytics, colors, t }: { analytics: Analytics; colors: any; t: any }) {
   const [tips, setTips] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -477,9 +478,9 @@ Return ONLY valid JSON array: ["tip1","tip2","tip3","tip4","tip5"]`;
   );
 }
 
-//main screen
+// main screen
 export default function AnalyticsScreen({ navigation }: any) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { t } = useLang();
   const { user, userProfile } = useAuthStore();
 
@@ -489,6 +490,10 @@ export default function AnalyticsScreen({ navigation }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const [period, setPeriod] = useState<Period>('7d');
   const [chart, setChart] = useState<{ likes: number[]; views: number[]; labels: string[] } | null>(null);
+
+  const gradientColors: string[] = isDark
+    ? ['#1A1008', '#2A1C0E', '#3A2814', '#4A341C']
+    : ['#FFC58A', '#FFD9A8', '#FFEAC8', '#FFF6E5'];
 
   const load = useCallback(async () => {
     if (!user?.uid) return;
@@ -522,8 +527,18 @@ export default function AnalyticsScreen({ navigation }: any) {
   useEffect(() => { if (allPosts.length > 0) setChart(buildChart(allPosts, period)); }, [period, allPosts]);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.warmBg }]}>
-      <View style={[styles.header, { backgroundColor: colors.header, borderBottomColor: `${colors.muted}20` }]}>
+    <View style={styles.container}>
+      {/* Gradient background */}
+      <LinearGradient
+        colors={gradientColors}
+        locations={[0, 0.30, 0.70, 1]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
+
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: 'transparent', borderBottomColor: `${colors.muted}20` }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={colors.darkText} />
         </TouchableOpacity>
@@ -539,7 +554,9 @@ export default function AnalyticsScreen({ navigation }: any) {
           <Text style={[styles.loadTxt, { color: colors.muted }]}>{t.loadingAnalytics}</Text>
         </View>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          style={{ backgroundColor: 'transparent' }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} colors={[colors.saffron]} />}
           contentContainerStyle={{ paddingBottom: 40 }}>
 
@@ -547,7 +564,6 @@ export default function AnalyticsScreen({ navigation }: any) {
           <View style={[styles.hero, { backgroundColor: colors.saffron }]}>
             <View style={styles.heroDecor1} />
             <View style={styles.heroDecor2} />
-
             <View style={styles.heroContent}>
               <View style={styles.heroTop}>
                 {userProfile?.avatarUrl ? (
@@ -565,7 +581,6 @@ export default function AnalyticsScreen({ navigation }: any) {
                   </View>
                 </View>
               </View>
-
               <View style={styles.heroStats}>
                 {[
                   { val: analytics?.totalPosts || 0, lbl: t.posts },

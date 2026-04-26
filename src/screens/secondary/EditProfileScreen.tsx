@@ -4,6 +4,7 @@ import {
   TextInput, ScrollView, ActivityIndicator,
   Alert, Image, Modal,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import firestore from '@react-native-firebase/firestore';
@@ -14,7 +15,7 @@ import { uploadToCloudinary } from '../../services/cloudinary.service';
 import { FOLK_CATEGORIES } from '../../constants/categories';
 
 export default function EditProfileScreen({ navigation }: any) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { t } = useLang();
   const { user, userProfile, fetchUserProfile } = useAuthStore();
   const [name, setName] = useState(userProfile?.name || '');
@@ -25,6 +26,10 @@ export default function EditProfileScreen({ navigation }: any) {
   const [coverUri, setCoverUri] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState('');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+
+  const gradientColors: string[] = isDark
+    ? ['#1A1008', '#2A1C0E', '#3A2814', '#4A341C']
+    : ['#FFC58A', '#FFD9A8', '#FFEAC8', '#FFF6E5'];
 
   const pickAvatar = async () => {
     const result = await launchImageLibrary({ mediaType: 'photo', quality: 0.8 });
@@ -96,148 +101,158 @@ export default function EditProfileScreen({ navigation }: any) {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.offwhite }]} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={gradientColors}
+        locations={[0, 0.30, 0.70, 1]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
 
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.header, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color={colors.darkText} />
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.darkText }]}>{t.editProfile}</Text>
-        <View style={{ width: 24 }} />
-      </View>
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
 
-      {/* Cover Photo */}
-      <TouchableOpacity style={styles.coverContainer} onPress={pickCover} activeOpacity={0.85}>
-        {coverUri ? (
-          <Image source={{ uri: coverUri }} style={styles.coverImg} />
-        ) : userProfile?.coverUrl ? (
-          <Image source={{ uri: userProfile.coverUrl }} style={styles.coverImg} />
-        ) : (
-          <View style={[styles.coverPlaceholder, { backgroundColor: colors.warmBg }]}>
-            <Ionicons name="image-outline" size={32} color={colors.muted} />
-            <Text style={[styles.coverPlaceholderText, { color: colors.muted }]}>Tap to add cover photo</Text>
-          </View>
-        )}
-        <View style={styles.coverOverlay}>
-          <View style={styles.coverActions}>
-            <View style={styles.editBadge}>
-              <Ionicons name="camera" size={14} color="#fff" />
-              <Text style={styles.editBadgeText}>Change Cover</Text>
-            </View>
-            {(coverUri || userProfile?.coverUrl) && (
-              <TouchableOpacity style={styles.deleteBadge} onPress={(e: any) => { e.stopPropagation?.(); removeCover(); }}>
-                <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
-                <Text style={styles.deleteBadgeText}>Remove</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+        {/* Header */}
+        <View style={[styles.header, { backgroundColor: 'transparent', borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color={colors.darkText} />
+          </TouchableOpacity>
+          <Text style={[styles.title, { color: colors.darkText }]}>{t.editProfile}</Text>
+          <View style={{ width: 24 }} />
         </View>
-      </TouchableOpacity>
 
-      {/* Avatar */}
-      <View style={styles.avatarSection}>
-        <TouchableOpacity style={styles.avatarWrapper} onPress={pickAvatar} activeOpacity={0.85}>
-          {avatarUri ? (
-            <Image source={{ uri: avatarUri }} style={[styles.avatar, { borderColor: colors.card }]} />
-          ) : userProfile?.avatarUrl ? (
-            <Image source={{ uri: userProfile.avatarUrl }} style={[styles.avatar, { borderColor: colors.card }]} />
+        {/* Cover Photo */}
+        <TouchableOpacity style={styles.coverContainer} onPress={pickCover} activeOpacity={0.85}>
+          {coverUri ? (
+            <Image source={{ uri: coverUri }} style={styles.coverImg} />
+          ) : userProfile?.coverUrl ? (
+            <Image source={{ uri: userProfile.coverUrl }} style={styles.coverImg} />
           ) : (
-            <View style={[styles.avatarPlaceholder, { backgroundColor: colors.warmBg, borderColor: colors.card }]}>
-              <Ionicons name="person" size={40} color={colors.saffron} />
+            <View style={[styles.coverPlaceholder, { backgroundColor: 'rgba(0,0,0,0.08)' }]}>
+              <Ionicons name="image-outline" size={32} color={colors.muted} />
+              <Text style={[styles.coverPlaceholderText, { color: colors.muted }]}>Tap to add cover photo</Text>
             </View>
           )}
-          <View style={[styles.avatarCameraBadge, { backgroundColor: colors.saffron }]}>
-            <Ionicons name="camera" size={14} color="#fff" />
-          </View>
-        </TouchableOpacity>
-        <Text style={[styles.changePhotoText, { color: colors.saffron }]}>Change Profile Photo</Text>
-        {(avatarUri || userProfile?.avatarUrl) && (
-          <TouchableOpacity style={styles.removePhotoBtn} onPress={removeAvatar}>
-            <Ionicons name="trash-outline" size={14} color="#FF4444" />
-            <Text style={styles.removePhotoText}>Remove Photo</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Form */}
-      <View style={styles.form}>
-        <Text style={[styles.label, { color: colors.darkText }]}>{t.name}</Text>
-        <TextInput
-          style={[styles.input, { backgroundColor: colors.card, color: colors.darkText, borderColor: colors.border }]}
-          value={name} onChangeText={setName} placeholder="Your name" placeholderTextColor={colors.muted}
-        />
-
-        <Text style={[styles.label, { color: colors.darkText }]}>{t.bio}</Text>
-        <TextInput
-          style={[styles.input, styles.bioInput, { backgroundColor: colors.card, color: colors.darkText, borderColor: colors.border }]}
-          value={bio} onChangeText={setBio} placeholder="Tell your story..." placeholderTextColor={colors.muted}
-          multiline numberOfLines={4} textAlignVertical="top"
-        />
-
-        <Text style={[styles.label, { color: colors.darkText }]}>{t.category}</Text>
-        <TouchableOpacity
-          style={[styles.input, styles.categorySelector, { backgroundColor: colors.card, borderColor: colors.border }]}
-          onPress={() => setShowCategoryModal(true)}>
-          <Text style={{ color: category ? colors.darkText : colors.muted, fontSize: 15 }}>
-            {category || 'Select your folk art category...'}
-          </Text>
-          <Ionicons name="chevron-down" size={18} color={colors.muted} />
-        </TouchableOpacity>
-
-        {loading && uploadProgress !== '' && (
-          <View style={[styles.progressBanner, { backgroundColor: colors.warmBg }]}>
-            <ActivityIndicator size="small" color={colors.saffron} />
-            <Text style={[styles.progressText, { color: colors.darkText }]}>{uploadProgress}</Text>
-          </View>
-        )}
-
-        {(avatarUri || coverUri) && !loading && (
-          <View style={styles.previewBanner}>
-            <Ionicons name="checkmark-circle-outline" size={16} color="#1A6B5C" />
-            <Text style={styles.previewText}>
-              {avatarUri && coverUri ? 'Profile photo + cover selected' : avatarUri ? 'Profile photo selected' : 'Cover photo selected'}
-            </Text>
-          </View>
-        )}
-
-        <TouchableOpacity
-          style={[styles.saveBtn, { backgroundColor: colors.saffron }, loading && { opacity: 0.7 }]}
-          onPress={handleSave} disabled={loading}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>{t.save}</Text>}
-        </TouchableOpacity>
-      </View>
-
-      {/* Category Modal */}
-      <Modal visible={showCategoryModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
-            <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-              <Text style={[styles.modalTitle, { color: colors.darkText }]}>{t.category}</Text>
-              <TouchableOpacity onPress={() => setShowCategoryModal(false)}>
-                <Ionicons name="close" size={24} color={colors.darkText} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {FOLK_CATEGORIES.map((cat) => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[styles.categoryItem, { borderBottomColor: colors.border }, category === cat && { backgroundColor: colors.warmBg }]}
-                  onPress={() => { setCategory(cat); setShowCategoryModal(false); }}>
-                  <Text style={[styles.categoryItemText, { color: colors.darkText }, category === cat && { color: colors.saffron, fontWeight: '600' }]}>
-                    {cat}
-                  </Text>
-                  {category === cat && <Ionicons name="checkmark" size={18} color={colors.saffron} />}
+          <View style={styles.coverOverlay}>
+            <View style={styles.coverActions}>
+              <View style={styles.editBadge}>
+                <Ionicons name="camera" size={14} color="#fff" />
+                <Text style={styles.editBadgeText}>Change Cover</Text>
+              </View>
+              {(coverUri || userProfile?.coverUrl) && (
+                <TouchableOpacity style={styles.deleteBadge} onPress={(e: any) => { e.stopPropagation?.(); removeCover(); }}>
+                  <Ionicons name="trash-outline" size={14} color="#FF6B6B" />
+                  <Text style={styles.deleteBadgeText}>Remove</Text>
                 </TouchableOpacity>
-              ))}
-              <View style={{ height: 20 }} />
-            </ScrollView>
+              )}
+            </View>
           </View>
-        </View>
-      </Modal>
+        </TouchableOpacity>
 
-      <View style={{ height: 40 }} />
-    </ScrollView>
+        {/* Avatar */}
+        <View style={styles.avatarSection}>
+          <TouchableOpacity style={styles.avatarWrapper} onPress={pickAvatar} activeOpacity={0.85}>
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={[styles.avatar, { borderColor: colors.card }]} />
+            ) : userProfile?.avatarUrl ? (
+              <Image source={{ uri: userProfile.avatarUrl }} style={[styles.avatar, { borderColor: colors.card }]} />
+            ) : (
+              <View style={[styles.avatarPlaceholder, { backgroundColor: colors.warmBg, borderColor: colors.card }]}>
+                <Ionicons name="person" size={40} color={colors.saffron} />
+              </View>
+            )}
+            <View style={[styles.avatarCameraBadge, { backgroundColor: colors.saffron }]}>
+              <Ionicons name="camera" size={14} color="#fff" />
+            </View>
+          </TouchableOpacity>
+          <Text style={[styles.changePhotoText, { color: colors.saffron }]}>Change Profile Photo</Text>
+          {(avatarUri || userProfile?.avatarUrl) && (
+            <TouchableOpacity style={styles.removePhotoBtn} onPress={removeAvatar}>
+              <Ionicons name="trash-outline" size={14} color="#FF4444" />
+              <Text style={styles.removePhotoText}>Remove Photo</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Form */}
+        <View style={styles.form}>
+          <Text style={[styles.label, { color: colors.darkText }]}>{t.name}</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.card, color: colors.darkText, borderColor: colors.border }]}
+            value={name} onChangeText={setName} placeholder="Your name" placeholderTextColor={colors.muted}
+          />
+
+          <Text style={[styles.label, { color: colors.darkText }]}>{t.bio}</Text>
+          <TextInput
+            style={[styles.input, styles.bioInput, { backgroundColor: colors.card, color: colors.darkText, borderColor: colors.border }]}
+            value={bio} onChangeText={setBio} placeholder="Tell your story..." placeholderTextColor={colors.muted}
+            multiline numberOfLines={4} textAlignVertical="top"
+          />
+
+          <Text style={[styles.label, { color: colors.darkText }]}>{t.category}</Text>
+          <TouchableOpacity
+            style={[styles.input, styles.categorySelector, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => setShowCategoryModal(true)}>
+            <Text style={{ color: category ? colors.darkText : colors.muted, fontSize: 15 }}>
+              {category || 'Select your folk art category...'}
+            </Text>
+            <Ionicons name="chevron-down" size={18} color={colors.muted} />
+          </TouchableOpacity>
+
+          {loading && uploadProgress !== '' && (
+            <View style={[styles.progressBanner, { backgroundColor: colors.warmBg }]}>
+              <ActivityIndicator size="small" color={colors.saffron} />
+              <Text style={[styles.progressText, { color: colors.darkText }]}>{uploadProgress}</Text>
+            </View>
+          )}
+
+          {(avatarUri || coverUri) && !loading && (
+            <View style={styles.previewBanner}>
+              <Ionicons name="checkmark-circle-outline" size={16} color="#1A6B5C" />
+              <Text style={styles.previewText}>
+                {avatarUri && coverUri ? 'Profile photo + cover selected' : avatarUri ? 'Profile photo selected' : 'Cover photo selected'}
+              </Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[styles.saveBtn, { backgroundColor: colors.saffron }, loading && { opacity: 0.7 }]}
+            onPress={handleSave} disabled={loading}>
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>{t.save}</Text>}
+          </TouchableOpacity>
+        </View>
+
+        {/* Category Modal */}
+        <Modal visible={showCategoryModal} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContainer, { backgroundColor: colors.card }]}>
+              <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.modalTitle, { color: colors.darkText }]}>{t.category}</Text>
+                <TouchableOpacity onPress={() => setShowCategoryModal(false)}>
+                  <Ionicons name="close" size={24} color={colors.darkText} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {FOLK_CATEGORIES.map((cat) => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.categoryItem, { borderBottomColor: colors.border }, category === cat && { backgroundColor: colors.warmBg }]}
+                    onPress={() => { setCategory(cat); setShowCategoryModal(false); }}>
+                    <Text style={[styles.categoryItemText, { color: colors.darkText }, category === cat && { color: colors.saffron, fontWeight: '600' }]}>
+                      {cat}
+                    </Text>
+                    {category === cat && <Ionicons name="checkmark" size={18} color={colors.saffron} />}
+                  </TouchableOpacity>
+                ))}
+                <View style={{ height: 20 }} />
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </View>
   );
 }
 

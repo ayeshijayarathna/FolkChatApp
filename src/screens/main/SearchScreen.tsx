@@ -4,6 +4,7 @@ import {
   FlatList, Image, Dimensions, ActivityIndicator,
   ScrollView, Modal, Share,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import firestore from '@react-native-firebase/firestore';
 import Video from 'react-native-video';
@@ -17,7 +18,7 @@ const GRID = Math.floor((width - 4) / 3);
 const isVideoUrl = (url: string) =>
   url?.includes('/video/upload/') || url?.endsWith('.mp4') || url?.endsWith('.mov');
 
-// video thumbnail component 
+// video thumbnail component
 function VideoThumbnail({ url, style }: { url: string; style: any }) {
   return (
     <View style={style}>
@@ -70,23 +71,17 @@ function PostGrid({ posts, colors, onPress }: { posts: Post[]; colors: any; onPr
                 <Ionicons name="image-outline" size={28} color={colors.muted} />
               </View>
             )}
-
-            {/* video badge in corner */}
             {isVideo && (
               <View style={pgStyles.videoBadge}>
                 <Ionicons name="videocam" size={11} color="#fff" />
               </View>
             )}
-
-            {/* multiple media badge */}
             {(item as any).mediaItems?.length > 1 && (
               <View style={pgStyles.mediaCount}>
                 <Ionicons name="copy-outline" size={11} color="#fff" />
                 <Text style={pgStyles.mediaCountTxt}>{(item as any).mediaItems.length}</Text>
               </View>
             )}
-
-            {/* likes badge */}
             {(item.likes || []).length > 0 && (
               <View style={pgStyles.likes}>
                 <Ionicons name="heart" size={10} color="#fff" />
@@ -164,23 +159,16 @@ function ModalSwiper({ post, colors }: { post: Post; colors: any }) {
           )
         )}
       />
-      {/* prev arrow */}
       {activeIndex > 0 && (
         <TouchableOpacity style={dm.arrowLeft} onPress={() => goTo(activeIndex - 1)}>
-          <View style={dm.arrowBg}>
-            <Ionicons name="chevron-back" size={18} color="#fff" />
-          </View>
+          <View style={dm.arrowBg}><Ionicons name="chevron-back" size={18} color="#fff" /></View>
         </TouchableOpacity>
       )}
-      {/* next arrow */}
       {activeIndex < items.length - 1 && (
         <TouchableOpacity style={dm.arrowRight} onPress={() => goTo(activeIndex + 1)}>
-          <View style={dm.arrowBg}>
-            <Ionicons name="chevron-forward" size={18} color="#fff" />
-          </View>
+          <View style={dm.arrowBg}><Ionicons name="chevron-forward" size={18} color="#fff" /></View>
         </TouchableOpacity>
       )}
-      {/* dots & counter */}
       {items.length > 1 && (
         <View style={dm.dotsRow}>
           {items.length <= 6
@@ -251,7 +239,6 @@ function PostDetailModal({ post, visible, onClose, navigation, colors, user, use
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={dm.overlay}>
         <View style={[dm.sheet, { backgroundColor: colors.card }]}>
-          {/* header */}
           <View style={[dm.header, { borderBottomColor: colors.border }]}>
             <TouchableOpacity
               style={dm.userRow}
@@ -273,10 +260,7 @@ function PostDetailModal({ post, visible, onClose, navigation, colors, user, use
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false}>
-            {/* multi img/video swiper */}
             <ModalSwiper post={post} colors={colors} />
-
-            {/* actions */}
             <View style={dm.actions}>
               <View style={dm.actionsLeft}>
                 <TouchableOpacity style={dm.actionBtn} onPress={handleLike}>
@@ -295,23 +279,15 @@ function PostDetailModal({ post, visible, onClose, navigation, colors, user, use
                 <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={24} color={saved ? colors.saffron : colors.darkText} />
               </TouchableOpacity>
             </View>
-
-            {/* info */}
             <View style={dm.info}>
               {likesCount > 0 && (
                 <Text style={[dm.likes, { color: colors.darkText }]}>
                   {likesCount} {likesCount > 1 ? t.searchLikes : t.searchLike}
                 </Text>
               )}
-              {post.title ? (
-                <Text style={[dm.title, { color: colors.darkText }]}>{post.title}</Text>
-              ) : null}
-              {post.caption ? (
-                <Text style={[dm.caption, { color: colors.muted }]}>{post.caption}</Text>
-              ) : null}
-              {post.category ? (
-                <Text style={[dm.tag, { color: colors.saffron }]}># {post.category}</Text>
-              ) : null}
+              {post.title ? <Text style={[dm.title, { color: colors.darkText }]}>{post.title}</Text> : null}
+              {post.caption ? <Text style={[dm.caption, { color: colors.muted }]}>{post.caption}</Text> : null}
+              {post.category ? <Text style={[dm.tag, { color: colors.saffron }]}># {post.category}</Text> : null}
               {post.commentCount > 0 && (
                 <TouchableOpacity onPress={() => { onClose(); navigation.navigate('UserProfile', { userId: post.userId }); }}>
                   <Text style={[dm.commentsLink, { color: colors.muted }]}>
@@ -359,7 +335,7 @@ const dm = StyleSheet.create({
 
 // main SearchScreen
 export default function SearchScreen({ navigation }: any) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { t } = useLang();
   const { user, userProfile } = useAuthStore();
 
@@ -374,6 +350,10 @@ export default function SearchScreen({ navigation }: any) {
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
+  const gradientColors: string[] = isDark
+    ? ['#1A1008', '#2A1C0E', '#3A2814', '#4A341C']
+    : ['#FFC58A', '#FFD9A8', '#FFEAC8', '#FFF6E5'];
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -384,7 +364,6 @@ export default function SearchScreen({ navigation }: any) {
           myFollowing = me.data()?.following || [];
           setFollowingList(myFollowing);
         }
-
         const usersSnap = await firestore().collection('users').get();
         const suggested = usersSnap.docs
           .map(d => ({ uid: d.id, ...d.data() } as Artist))
@@ -432,9 +411,7 @@ export default function SearchScreen({ navigation }: any) {
     if (!user?.uid) return;
     const isFollowing = followingList.includes(targetUid);
     setFollowingList(prev => isFollowing ? prev.filter(id => id !== targetUid) : [...prev, targetUid]);
-    if (!isFollowing) {
-      setSuggestedArtists(prev => prev.filter(a => a.uid !== targetUid));
-    }
+    if (!isFollowing) setSuggestedArtists(prev => prev.filter(a => a.uid !== targetUid));
     try {
       const myRef = firestore().collection('users').doc(user.uid);
       const targetRef = firestore().collection('users').doc(targetUid);
@@ -459,7 +436,6 @@ export default function SearchScreen({ navigation }: any) {
 
   const postsFoundLabel = (count: number) =>
     `${count} ${count === 1 ? t.searchPostsFound : t.searchPostsFoundPlural}`;
-
   const artistsFoundLabel = (count: number) =>
     `${count} ${count === 1 ? t.searchArtistsFound : t.searchArtistsFoundPlural}`;
 
@@ -498,8 +474,18 @@ export default function SearchScreen({ navigation }: any) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.bg }]}>
-      <View style={[styles.searchBar, { backgroundColor: colors.header, borderBottomColor: colors.border }]}>
+    <View style={styles.container}>
+      {/* Gradient background */}
+      <LinearGradient
+        colors={gradientColors}
+        locations={[0, 0.30, 0.70, 1]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
+
+      {/* Search bar */}
+      <View style={[styles.searchBar, { backgroundColor: 'transparent', borderBottomColor: colors.border }]}>
         <Text style={[styles.screenTitle, { color: colors.darkText }]}>{t.searchTitle}</Text>
         <View style={[styles.inputWrap, { backgroundColor: colors.offwhite, borderColor: colors.border }]}>
           <Ionicons name="search-outline" size={18} color={colors.muted} />
@@ -519,7 +505,8 @@ export default function SearchScreen({ navigation }: any) {
         </View>
       </View>
 
-      <View style={[styles.tabs, { backgroundColor: colors.header, borderBottomColor: colors.border }]}>
+      {/* Tabs */}
+      <View style={[styles.tabs, { backgroundColor: 'transparent', borderBottomColor: colors.border }]}>
         {(['posts', 'artists'] as const).map(tab => (
           <TouchableOpacity key={tab}
             style={[styles.tab, activeTab === tab && [styles.tabActive, { borderBottomColor: colors.saffron }]]}
@@ -536,7 +523,10 @@ export default function SearchScreen({ navigation }: any) {
           <ActivityIndicator size="large" color={colors.saffron} />
         </View>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          style={{ backgroundColor: 'transparent' }}
+          contentContainerStyle={{ paddingBottom: 30 }}>
           {activeTab === 'posts' && (
             <>
               {hasSearched && (

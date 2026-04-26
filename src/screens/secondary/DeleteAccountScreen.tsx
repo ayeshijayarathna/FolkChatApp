@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, ActivityIndicator, ScrollView, Alert,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
@@ -11,7 +12,7 @@ import { useLang } from '../../context/LanguageContext';
 import { useAuthStore } from '../../store/authStore';
 
 export default function DeleteAccountScreen({ navigation }: any) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { t } = useLang();
   const { logout } = useAuthStore();
 
@@ -22,28 +23,23 @@ export default function DeleteAccountScreen({ navigation }: any) {
   const [loading, setLoading] = useState(false);
   const [isGoogleUser, setIsGoogleUser] = useState(false);
 
+  const gradientColors: string[] = isDark
+    ? ['#1A1008', '#2A1C0E', '#3A2814', '#4A341C']
+    : ['#FFC58A', '#FFD9A8', '#FFEAC8', '#FFF6E5'];
+
   useEffect(() => {
-    // Check if user signed in with Google
     const currentUser = auth().currentUser;
     if (currentUser) {
-      const isGoogle = currentUser.providerData.some(
-        p => p.providerId === 'google.com'
-      );
+      const isGoogle = currentUser.providerData.some(p => p.providerId === 'google.com');
       setIsGoogleUser(isGoogle);
     }
   }, []);
 
   const handleDelete = async () => {
     if (isGoogleUser) {
-      if (confirmText !== 'DELETE') {
-        Alert.alert('Error', 'Please type DELETE to confirm');
-        return;
-      }
+      if (confirmText !== 'DELETE') { Alert.alert('Error', 'Please type DELETE to confirm'); return; }
     } else {
-      if (!password.trim()) {
-        Alert.alert('Error', 'Please enter your password');
-        return;
-      }
+      if (!password.trim()) { Alert.alert('Error', 'Please enter your password'); return; }
     }
 
     setLoading(true);
@@ -58,15 +54,10 @@ export default function DeleteAccountScreen({ navigation }: any) {
       }
 
       const uid = currentUser.uid;
-
-      // delete posts
       const postsSnap = await firestore().collection('posts').where('userId', '==', uid).get();
       await Promise.all(postsSnap.docs.map(doc => doc.ref.delete()));
-
       await firestore().collection('users').doc(uid).delete();
-
       await currentUser.delete();
-
       await logout();
     } catch (e: any) {
       setLoading(false);
@@ -81,9 +72,16 @@ export default function DeleteAccountScreen({ navigation }: any) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.bg }]}>
-      {/* header */}
-      <View style={[styles.header, { backgroundColor: colors.header, borderBottomColor: colors.border }]}>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={gradientColors}
+        locations={[0, 0.30, 0.70, 1]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
+
+      <View style={[styles.header, { backgroundColor: 'transparent', borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={colors.darkText} />
         </TouchableOpacity>
@@ -105,7 +103,6 @@ export default function DeleteAccountScreen({ navigation }: any) {
 
         {step === 1 ? (
           <>
-            {/* warning card */}
             <View style={[styles.warningCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Ionicons name="warning-outline" size={36} color={colors.saffron} />
               <Text style={[styles.warningTitle, { color: colors.darkText }]}>{t.deleteAccountStep1Title}</Text>
@@ -142,7 +139,6 @@ export default function DeleteAccountScreen({ navigation }: any) {
           </>
         ) : (
           <>
-            {/* warning reminder */}
             <View style={[styles.warningCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Ionicons name="shield-outline" size={32} color={colors.saffron} />
               <Text style={[styles.warningTitle, { color: colors.darkText }]}>{t.deleteAccountStep2Title}</Text>
@@ -152,7 +148,6 @@ export default function DeleteAccountScreen({ navigation }: any) {
             </View>
 
             {isGoogleUser ? (
-              /* Google user ,type DELETE */
               <View style={{ gap: 8 }}>
                 <Text style={[styles.pwLabel, { color: colors.darkText }]}>
                   Type <Text style={{ color: colors.saffron, fontWeight: 'bold' }}>DELETE</Text> to confirm
@@ -176,11 +171,8 @@ export default function DeleteAccountScreen({ navigation }: any) {
                 </Text>
               </View>
             ) : (
-              /* Email user ,enter password */
               <View style={{ gap: 8 }}>
-                <Text style={[styles.pwLabel, { color: colors.darkText }]}>
-                  {t.deleteAccountConfirmLabel}
-                </Text>
+                <Text style={[styles.pwLabel, { color: colors.darkText }]}>{t.deleteAccountConfirmLabel}</Text>
                 <View style={[styles.pwRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   <TextInput
                     style={[styles.pwInput, { color: colors.darkText }]}
@@ -203,8 +195,7 @@ export default function DeleteAccountScreen({ navigation }: any) {
                 styles.deleteBtn,
                 { backgroundColor: colors.saffron },
                 loading && { opacity: 0.7 },
-                (!isGoogleUser && !password) || (isGoogleUser && confirmText !== 'DELETE')
-                  ? { opacity: 0.5 } : {},
+                (!isGoogleUser && !password) || (isGoogleUser && confirmText !== 'DELETE') ? { opacity: 0.5 } : {},
               ]}
               onPress={handleDelete}
               disabled={loading || (!isGoogleUser && !password) || (isGoogleUser && confirmText !== 'DELETE')}>
@@ -225,7 +216,6 @@ export default function DeleteAccountScreen({ navigation }: any) {
             </TouchableOpacity>
           </>
         )}
-
       </ScrollView>
     </View>
   );
@@ -242,33 +232,21 @@ const styles = StyleSheet.create({
   stepDot: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
   stepNum: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
   stepLine: { flex: 1, height: 3, maxWidth: 80 },
-  warningCard: {
-    borderRadius: 16, borderWidth: 0.5, padding: 20,
-    alignItems: 'center', gap: 10,
-  },
+  warningCard: { borderRadius: 16, borderWidth: 0.5, padding: 20, alignItems: 'center', gap: 10 },
   warningTitle: { fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
   warningBody: { fontSize: 14, lineHeight: 22 },
   infoCard: { borderRadius: 16, borderWidth: 0.5, padding: 16, gap: 12 },
   infoTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   infoText: { fontSize: 14 },
-  continueBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, padding: 16, borderRadius: 12,
-  },
+  continueBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16, borderRadius: 12 },
   continueBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   cancelBtn: { alignItems: 'center', padding: 14, borderRadius: 12, borderWidth: 1 },
   cancelBtnText: { fontSize: 15, fontWeight: '500' },
   pwLabel: { fontSize: 14, fontWeight: '600' },
-  pwRow: {
-    flexDirection: 'row', alignItems: 'center',
-    borderRadius: 12, borderWidth: 1, paddingHorizontal: 14,
-  },
+  pwRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, paddingHorizontal: 14 },
   pwInput: { flex: 1, paddingVertical: 14, fontSize: 15 },
   hintText: { fontSize: 12 },
-  deleteBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, padding: 16, borderRadius: 12,
-  },
+  deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16, borderRadius: 12 },
   deleteBtnText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
 });

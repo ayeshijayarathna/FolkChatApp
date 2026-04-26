@@ -212,7 +212,7 @@ export default function LoginScreen({ navigation }: any) {
 
           <View style={styles.orRow}>
             <View style={[styles.orLine, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(212,101,26,0.22)' }]} />
-            <Text style={[styles.orText, { color: mutedColor }]}>OR</Text>
+            <Text style={[styles.orText, { color: mutedColor }]}>OR </Text>
             <View style={[styles.orLine, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(212,101,26,0.22)' }]} />
           </View>
 
@@ -231,7 +231,7 @@ export default function LoginScreen({ navigation }: any) {
             {googleLoading ? <ActivityIndicator color={textColor} /> : (
               <View style={styles.googleBtnInner}>
                 <Ionicons name="logo-google" size={20} color="#DB4437" />
-                <Text style={[styles.googleBtnText, { color: textColor }]}>Continue with Google</Text>
+                <Text style={[styles.googleBtnText, { color: textColor }]}>Continue with Google </Text>
               </View>
             )}
           </TouchableOpacity>

@@ -116,8 +116,8 @@ const translations = {
     aboutContactTitle: 'Contact',
     aboutCopyright: 'Made with love for Sri Lankan Folk Artists',
 
-    uploadArtworkTab: 'Post',
-    createEventTab: 'Event',
+    uploadArtworkTab: 'Post ',
+    createEventTab: 'Event ',
     uploadArtworkTitle: 'Upload Artwork',
     createEventTitle: 'Create Event',
     artTitle: 'Title',

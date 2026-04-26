@@ -1,16 +1,21 @@
 import React from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Image, 
+  Image,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useTheme } from '../../context/ThemeContext';
 import { useLang } from '../../context/LanguageContext';
 import { COLORS } from '../../constants/colors';
 
 export default function AboutScreen({ navigation }: any) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { t } = useLang();
+
+  const gradientColors: string[] = isDark
+    ? ['#1A1008', '#2A1C0E', '#3A2814', '#4A341C']
+    : ['#FFC58A', '#FFD9A8', '#FFEAC8', '#FFF6E5'];
 
   const features = [
     { icon: 'images-outline' as const, text: t.aboutF1 },
@@ -21,10 +26,16 @@ export default function AboutScreen({ navigation }: any) {
   ];
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={gradientColors}
+        locations={[0, 0.30, 0.70, 1]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
 
-      {/* top navigation header */}
-      <View style={[styles.header, { backgroundColor: colors.header, borderBottomColor: colors.border }]}>
+      <View style={[styles.header, { backgroundColor: 'transparent', borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={colors.darkText} />
         </TouchableOpacity>
@@ -32,10 +43,9 @@ export default function AboutScreen({ navigation }: any) {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} style={{ backgroundColor: 'transparent' }}>
 
-        {/* hero banner*/}
-        <View style={[styles.heroBanner, { backgroundColor: colors.warmBg, borderColor: colors.border }]}>
+        <View style={[styles.heroBanner]}>
           <Image
             source={require('../../../assets/images/about.png')}
             style={styles.heroImage}
@@ -48,13 +58,11 @@ export default function AboutScreen({ navigation }: any) {
           </View>
         </View>
 
-        {/* mission statement card */}
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.cardTitle, { color: colors.darkText }]}>{t.aboutMissionTitle}</Text>
           <Text style={[styles.cardText, { color: colors.muted }]}>{t.aboutMissionText}</Text>
         </View>
 
-        {/* features list card */}
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Text style={[styles.cardTitle, { color: colors.darkText }]}>{t.aboutFeaturesTitle}</Text>
           {features.map((f, i) => (
@@ -81,7 +89,6 @@ export default function AboutScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingTop: 52, paddingBottom: 16, borderBottomWidth: 0.5,
@@ -89,14 +96,10 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: 'bold' },
   heroBanner: { margin: 16, borderRadius: 20, padding: 32, alignItems: 'center', gap: 8 },
   heroImage: { width: 140, height: 140, marginBottom: 8 },
-  appName: { fontSize: 28, fontWeight: 'bold', color:COLORS.saffron},
-  tagline: { fontSize: 14, color:COLORS.rust, textAlign: 'center' },
-  versionBadge: {
-    backgroundColor: 'rgba(175, 145, 113, 0.25)',
-    borderRadius: 20, paddingHorizontal: 16,
-    paddingVertical: 6, marginTop: 8,
-  },
-  versionText: { color:COLORS.darkText, fontSize: 13, fontWeight: '600' },
+  appName: { fontSize: 28, fontWeight: 'bold', color: COLORS.saffron },
+  tagline: { fontSize: 14, color: COLORS.rust, textAlign: 'center' },
+  versionBadge: { backgroundColor: 'rgba(175, 145, 113, 0.25)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 6, marginTop: 8 },
+  versionText: { color: COLORS.darkText, fontSize: 13, fontWeight: '600' },
   card: { marginHorizontal: 16, marginBottom: 12, borderRadius: 16, borderWidth: 0.5, padding: 20 },
   cardTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
   cardText: { fontSize: 14, lineHeight: 22, marginBottom: 4 },

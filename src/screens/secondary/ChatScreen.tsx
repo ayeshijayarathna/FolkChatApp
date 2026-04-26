@@ -63,42 +63,23 @@ const BG_MAP: Record<string, string> = {
   forest: '#dff2e1', sunset: '#fff0e0', lavender: '#f0e5f5',
 };
 
-// image full screen viewer
+//image full screen viewer
 function ImageViewer({ uri, visible, onClose }: { uri: string; visible: boolean; onClose: () => void }) {
   const downloadImage = async () => {
     try {
       const RNBlobUtil = require('react-native-blob-util').default;
       if (Platform.OS === 'android') {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE
-        );
-        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          Alert.alert('Permission denied', 'Storage permission required.');
-          return;
-        }
+        const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE);
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) { Alert.alert('Permission denied', 'Storage permission required.'); return; }
       }
       const ext = uri.split('?')[0].split('.').pop() || 'jpg';
       const fileName = `FolkChat_${Date.now()}.${ext}`;
       const dest = `${RNBlobUtil.fs.dirs.PictureDir}/${fileName}`;
-      await RNBlobUtil.config({
-        fileCache: true,
-        path: dest,
-        addAndroidDownloads: {
-          useDownloadManager: true,
-          notification: true,
-          title: fileName,
-          description: 'Downloading from FolkChat',
-          mime: 'image/jpeg',
-          path: dest,
-        },
-      }).fetch('GET', uri);
+      await RNBlobUtil.config({ fileCache: true, path: dest, addAndroidDownloads: { useDownloadManager: true, notification: true, title: fileName, description: 'Downloading from FolkChat', mime: 'image/jpeg', path: dest } }).fetch('GET', uri);
       Alert.alert('Downloaded!', 'Image saved to Gallery.');
     } catch {
-      // fallback share URL
-      try {
-        const { Share } = require('react-native');
-        await Share.share({ message: uri });
-      } catch { Alert.alert('Error', 'Could not download image.'); }
+      try { const { Share } = require('react-native'); await Share.share({ message: uri }); }
+      catch { Alert.alert('Error', 'Could not download image.'); }
     }
   };
 
@@ -135,38 +116,21 @@ const iv = StyleSheet.create({
 // document bubble
 function DocumentBubble({ msg, mine, colors }: { msg: Message; mine: boolean; colors: any }) {
   const openDoc = async () => {
-    try {
-      const { Linking } = require('react-native');
-      if (msg.documentUrl) await Linking.openURL(msg.documentUrl);
-    } catch { Alert.alert('Error', 'Cannot open document'); }
+    try { const { Linking } = require('react-native'); if (msg.documentUrl) await Linking.openURL(msg.documentUrl); }
+    catch { Alert.alert('Error', 'Cannot open document'); }
   };
-
   const ext = (msg.documentName || 'file').split('.').pop()?.toUpperCase() || 'FILE';
-  const extColors: Record<string, string> = {
-    PDF: '#FF4444', DOC: '#2B5797', DOCX: '#2B5797',
-    XLS: '#1D6F42', XLSX: '#1D6F42', PPT: '#D24726',
-    PPTX: '#D24726', TXT: '#666',
-  };
-  const extColor = extColors[ext] || '#888';
-
+  const extColors: Record<string, string> = { PDF: '#FF4444', DOC: '#2B5797', DOCX: '#2B5797', XLS: '#1D6F42', XLSX: '#1D6F42', PPT: '#D24726', PPTX: '#D24726', TXT: '#666' };
   return (
     <TouchableOpacity
-      style={[db.bubble,
-        mine ? { backgroundColor: colors.saffron } : { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}
-      onPress={openDoc}
-      activeOpacity={0.8}>
-      <View style={[db.iconWrap, { backgroundColor: extColor }]}>
+      style={[db.bubble, mine ? { backgroundColor: colors.saffron } : { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}
+      onPress={openDoc} activeOpacity={0.8}>
+      <View style={[db.iconWrap, { backgroundColor: extColors[ext] || '#888' }]}>
         <Text style={db.extTxt}>{ext}</Text>
       </View>
       <View style={db.info}>
-        <Text style={[db.name, { color: mine ? '#fff' : colors.darkText }]} numberOfLines={2}>
-          {msg.documentName || 'Document'}
-        </Text>
-        {msg.documentSize ? (
-          <Text style={[db.size, { color: mine ? 'rgba(255,255,255,0.7)' : colors.muted }]}>
-            {msg.documentSize}
-          </Text>
-        ) : null}
+        <Text style={[db.name, { color: mine ? '#fff' : colors.darkText }]} numberOfLines={2}>{msg.documentName || 'Document'}</Text>
+        {msg.documentSize ? <Text style={[db.size, { color: mine ? 'rgba(255,255,255,0.7)' : colors.muted }]}>{msg.documentSize}</Text> : null}
       </View>
       <Ionicons name="open-outline" size={18} color={mine ? 'rgba(255,255,255,0.8)' : colors.muted} />
     </TouchableOpacity>
@@ -182,7 +146,25 @@ const db = StyleSheet.create({
   size: { fontSize: 11, marginTop: 2 },
 });
 
-// main chat screen
+//avatar component 
+function MsgAvatar({ uri, name, size = 32, colors }: { uri?: string; name?: string; size?: number; colors: any }) {
+  if (uri) {
+    return <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} />;
+  }
+  return (
+    <View style={{
+      width: size, height: size, borderRadius: size / 2,
+      backgroundColor: colors.saffron,
+      justifyContent: 'center', alignItems: 'center',
+    }}>
+      <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: size * 0.4 }}>
+        {initials(name || '')}
+      </Text>
+    </View>
+  );
+}
+
+//main Chat Screen 
 export default function ChatScreen({ navigation, route }: any) {
   const { colors } = useTheme();
   const { user, userProfile } = useAuthStore();
@@ -204,19 +186,11 @@ export default function ChatScreen({ navigation, route }: any) {
   const flatRef = useRef<FlatList>(null);
   const typingTimer = useRef<any>(null);
 
-  // reload chat bg every time screen is focused (settings change apply)
-  useFocusEffect(
-    useCallback(() => {
-      AsyncStorage.getItem('chatTheme')
-        .then(v => setChatBg(v || 'default'))
-        .catch(() => setChatBg('default'));
-      AsyncStorage.getItem('chatCustomBg')
-        .then(v => setCustomBgUri(v || null))
-        .catch(() => setCustomBgUri(null));
-    }, [])
-  );
+  useFocusEffect(useCallback(() => {
+    AsyncStorage.getItem('chatTheme').then(v => setChatBg(v || 'default')).catch(() => setChatBg('default'));
+    AsyncStorage.getItem('chatCustomBg').then(v => setCustomBgUri(v || null)).catch(() => setCustomBgUri(null));
+  }, []));
 
-  // presence 
   useEffect(() => {
     if (!user?.uid) return;
     const ref = firestore().collection('presence').doc(user.uid);
@@ -224,16 +198,12 @@ export default function ChatScreen({ navigation, route }: any) {
     return () => { ref.set({ online: false, lastSeen: firestore.FieldValue.serverTimestamp() }, { merge: true }); };
   }, [user]);
 
-  // watch other user presence
   useEffect(() => {
     if (!otherUserId) return;
     return firestore().collection('presence').doc(otherUserId)
-      .onSnapshot(s => {
-        if (s.exists()) setOtherStatus({ online: s.data()!.online || false, lastSeen: s.data()!.lastSeen });
-      }, () => { });
+      .onSnapshot(s => { if (s.exists()) setOtherStatus({ online: s.data()!.online || false, lastSeen: s.data()!.lastSeen }); }, () => { });
   }, [otherUserId]);
 
-  // ensure chat doc & mark read
   const ensureChat = useCallback(async () => {
     if (!user?.uid || !otherUserId) return;
     const ref = firestore().collection('chats').doc(chatId);
@@ -244,7 +214,6 @@ export default function ChatScreen({ navigation, route }: any) {
     ref.update({ [`unreadCount.${user.uid}`]: 0 }).catch(() => { });
   }, [chatId, user, otherUserId]);
 
-  // messages listener
   useEffect(() => {
     if (!user?.uid) return;
     ensureChat();
@@ -256,7 +225,6 @@ export default function ChatScreen({ navigation, route }: any) {
       }, () => { });
   }, [chatId, user]);
 
-  // typing listener
   useEffect(() => {
     if (!otherUserId) return;
     return firestore().collection('chats').doc(chatId)
@@ -275,7 +243,6 @@ export default function ChatScreen({ navigation, route }: any) {
     typingTimer.current = setTimeout(() => updateTyping(false), 2000);
   };
 
-  // helpers
   const pushChatMeta = async (lastMsg: string) => {
     await firestore().collection('chats').doc(chatId).update({
       lastMessage: lastMsg, lastMessageTime: firestore.FieldValue.serverTimestamp(),
@@ -290,7 +257,6 @@ export default function ChatScreen({ navigation, route }: any) {
     });
   };
 
-  //send text
   const sendMessage = async () => {
     if (!text.trim() || !user?.uid) return;
     const msgText = text.trim();
@@ -304,14 +270,16 @@ export default function ChatScreen({ navigation, route }: any) {
     setSending(true);
     try {
       await firestore().collection('chats').doc(chatId).collection('messages').add({
-        senderId: user.uid, senderName: userProfile?.name || 'User', senderAvatar: userProfile?.avatarUrl || '',
-        text: msgText, type: 'text', createdAt: firestore.FieldValue.serverTimestamp(), edited: false, deletedFor: [],
+        senderId: user.uid,
+        senderName: userProfile?.name || 'User',
+        senderAvatar: userProfile?.avatarUrl || '',
+        text: msgText, type: 'text',
+        createdAt: firestore.FieldValue.serverTimestamp(), edited: false, deletedFor: [],
       });
       await pushChatMeta(msgText);
     } catch { } finally { setSending(false); }
   };
 
-  // send img
   const sendImage = async (fromCamera = false) => {
     setShowAttach(false);
     const picker = fromCamera ? launchCamera : launchImageLibrary;
@@ -325,20 +293,15 @@ export default function ChatScreen({ navigation, route }: any) {
         text: '', type: 'image', imageUrl: url,
         createdAt: firestore.FieldValue.serverTimestamp(), edited: false, deletedFor: [],
       });
-      await pushChatMeta('📷 Photo');
+      await pushChatMeta('Photo');
     } catch { Alert.alert('Error', 'Failed to send image'); }
     finally { setUploadingMedia(false); }
   };
 
-  // send docs
   const sendDocument = async () => {
     setShowAttach(false);
     try {
-      const result = await launchImageLibrary({
-        mediaType: 'mixed',
-        quality: 0.9,
-        selectionLimit: 1,
-      });
+      const result = await launchImageLibrary({ mediaType: 'mixed', quality: 0.9, selectionLimit: 1 });
       if (!result.assets?.[0]?.uri) return;
       const file = result.assets[0];
       setUploadingMedia(true);
@@ -346,10 +309,8 @@ export default function ChatScreen({ navigation, route }: any) {
       const url = await uploadToCloudinary(file.uri!, isVideo ? 'video' : 'image');
       const fileName = file.fileName || 'File';
       const sizeKB = file.fileSize ? `${(file.fileSize / 1024).toFixed(1)} KB` : '';
-
       await firestore().collection('chats').doc(chatId).collection('messages').add({
-        senderId: user?.uid, senderName: userProfile?.name || 'User',
-        senderAvatar: userProfile?.avatarUrl || '',
+        senderId: user?.uid, senderName: userProfile?.name || 'User', senderAvatar: userProfile?.avatarUrl || '',
         text: '', type: isVideo ? 'image' : 'document',
         ...(isVideo ? { imageUrl: url } : { documentUrl: url, documentName: fileName, documentSize: sizeKB }),
         createdAt: firestore.FieldValue.serverTimestamp(), edited: false, deletedFor: [],
@@ -360,7 +321,6 @@ export default function ChatScreen({ navigation, route }: any) {
     } finally { setUploadingMedia(false); }
   };
 
-  // delete
   const deleteMessage = (msg: Message) => {
     setSelectedMsg(null);
     const opts: any[] = [
@@ -378,7 +338,6 @@ export default function ChatScreen({ navigation, route }: any) {
     Alert.alert('Delete Message', '', opts);
   };
 
-  // clear chat
   const clearChat = () => {
     Alert.alert('Clear Chat', 'Clear all messages for you?', [
       { text: 'Cancel', style: 'cancel' },
@@ -389,8 +348,8 @@ export default function ChatScreen({ navigation, route }: any) {
     ]);
   };
 
-  //list data
   type ListItem = Message | { type: 'header'; date: string; id: string };
+
   const getListData = (): ListItem[] => {
     const out: ListItem[] = [];
     let lastDate = '';
@@ -411,8 +370,8 @@ export default function ChatScreen({ navigation, route }: any) {
     : !isCustom ? { backgroundColor: colors.warmBg }
     : {};
 
-  // render msg
-  const renderItem = ({ item }: { item: ListItem }) => {
+  // render each message
+  const renderItem = ({ item, index }: { item: ListItem; index: number }) => {
     if ((item as any).type === 'header') {
       return (
         <View style={s.dateHeader}>
@@ -422,23 +381,61 @@ export default function ChatScreen({ navigation, route }: any) {
         </View>
       );
     }
+
     const msg = item as Message;
     const mine = isMe(msg);
+    const listData = getListData();
+    const prevItem = index > 0 ? listData[index - 1] : null;
+    const prevMsg = prevItem && !(prevItem as any).type ? prevItem as Message : null;
+
+    const nextItem = index < listData.length - 1 ? listData[index + 1] : null;
+    const nextMsg = nextItem && !(nextItem as any).type ? nextItem as Message : null;
+    const isLastInGroup = !nextMsg || nextMsg.senderId !== msg.senderId;
+    const isFirstInGroup = !prevMsg || prevMsg.senderId !== msg.senderId;
+
+    // avatar placeholder width to keep bubble alignment consistent
+    const AVATAR_SIZE = 32;
+    const AVATAR_GAP = 8;
+    const avatarPlaceholderWidth = AVATAR_SIZE + AVATAR_GAP;
+
     return (
-      <TouchableOpacity onLongPress={() => setSelectedMsg(msg)} activeOpacity={0.9}
+      <TouchableOpacity
+        onLongPress={() => setSelectedMsg(msg)}
+        activeOpacity={0.9}
         style={[s.row, mine ? s.rowRight : s.rowLeft]}>
+
+        {/*other person's avatar (left side)*/}
         {!mine && (
-          msg.senderAvatar
-            ? <Image source={{ uri: msg.senderAvatar }} style={s.msgAvatar} />
-            : <View style={[s.msgAvatarInit, { backgroundColor: colors.saffron }]}>
-                <Text style={s.initTxt}>{initials(msg.senderName || userName || '')}</Text>
-              </View>
+          <View style={{ width: AVATAR_SIZE, marginRight: AVATAR_GAP, alignSelf: 'flex-end', marginBottom: 2 }}>
+            {isLastInGroup ? (
+              <MsgAvatar
+                uri={msg.senderAvatar}
+                name={msg.senderName || userName}
+                size={AVATAR_SIZE}
+                colors={colors}
+              />
+            ) : (
+              <View style={{ width: AVATAR_SIZE }} />
+            )}
+          </View>
         )}
-        <View style={{ maxWidth: '75%', alignItems: mine ? 'flex-end' : 'flex-start' }}>
-          {/* Image message */}
+
+        {/*bubble content*/}
+        <View style={{ maxWidth: '72%', alignItems: mine ? 'flex-end' : 'flex-start' }}>
+
+          {!mine && isFirstInGroup && (
+            <Text style={[s.senderName, { color: colors.saffron }]}>
+              {msg.senderName || userName}
+            </Text>
+          )}
+
           {msg.type === 'image' && msg.imageUrl ? (
             <TouchableOpacity onPress={() => setViewerUri(msg.imageUrl!)} onLongPress={() => setSelectedMsg(msg)}>
-              <View style={[s.imgBubble, mine ? { backgroundColor: colors.saffron } : { backgroundColor: colors.card }]}>
+              <View style={[s.imgBubble,
+                mine
+                  ? { borderBottomRightRadius: isLastInGroup ? 4 : 18 }
+                  : { borderBottomLeftRadius: isLastInGroup ? 4 : 18 },
+              ]}>
                 <Image source={{ uri: msg.imageUrl }} style={s.chatImg} resizeMode="cover" />
                 <View style={s.imgOverlay}>
                   <Ionicons name="expand-outline" size={18} color="rgba(255,255,255,0.8)" />
@@ -448,37 +445,86 @@ export default function ChatScreen({ navigation, route }: any) {
           ) : msg.type === 'document' ? (
             <DocumentBubble msg={msg} mine={mine} colors={colors} />
           ) : (
-            <View style={[s.textBubble,
-              mine ? { backgroundColor: colors.saffron } : { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 },
-              mine ? s.bubbleR : s.bubbleL]}>
+            <View style={[
+              s.textBubble,
+              mine
+                ? { backgroundColor: colors.saffron, borderBottomRightRadius: isLastInGroup ? 4 : 18 }
+                : { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderBottomLeftRadius: isLastInGroup ? 4 : 18 },
+            ]}>
               <Text style={[s.bubbleTxt, { color: mine ? '#fff' : colors.darkText }]}>{msg.text}</Text>
-              {msg.edited && <Text style={[s.editedTxt, { color: mine ? 'rgba(255,255,255,0.65)' : colors.muted }]}>edited</Text>}
+              {msg.edited && (
+                <Text style={[s.editedTxt, { color: mine ? 'rgba(255,255,255,0.65)' : colors.muted }]}>edited</Text>
+              )}
             </View>
           )}
+
           <View style={s.meta}>
             <Text style={[s.metaTime, { color: colors.muted }]}>{fmtTime(msg.createdAt)}</Text>
             {mine && <Ionicons name="checkmark-done" size={13} color={colors.saffron} />}
           </View>
         </View>
+
+        {/* my avatar (right side) */}
+        {mine && (
+          <View style={{ width: AVATAR_SIZE, marginLeft: AVATAR_GAP, alignSelf: 'flex-end', marginBottom: 2 }}>
+            {isLastInGroup ? (
+              <MsgAvatar
+                uri={userProfile?.avatarUrl}
+                name={userProfile?.name || 'Me'}
+                size={AVATAR_SIZE}
+                colors={colors}
+              />
+            ) : (
+              <View style={{ width: AVATAR_SIZE }} />
+            )}
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
 
+  //message list
+  const MessageList = () => (
+    <FlatList
+      ref={flatRef}
+      data={getListData()}
+      keyExtractor={i => (i as any).id}
+      renderItem={renderItem}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ padding: 12, paddingBottom: 8 }}
+      onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: false })}
+      ListEmptyComponent={
+        <View style={s.emptyChat}>
+          <Ionicons name="chatbubble-outline" size={48} color={colors.muted} />
+          <Text style={[s.emptyChatTxt, { color: colors.muted }]}>Say hello to {userName}!</Text>
+        </View>
+      }
+    />
+  );
+
+  const TypingIndicator = () => isOtherTyping ? (
+    <View style={[s.typingBar, { backgroundColor: colors.card }]}>
+      <MsgAvatar uri={userAvatar} name={userName} size={24} colors={colors} />
+      <View style={[s.typingBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={s.dots}>
+          {[0, 1, 2].map(i => <View key={i} style={[s.dot, { backgroundColor: colors.muted }]} />)}
+        </View>
+      </View>
+      <Text style={[s.typingTxt, { color: colors.muted }]}>{userName} is typing...</Text>
+    </View>
+  ) : null;
+
   return (
     <View style={[s.container, { backgroundColor: colors.bg }]}>
-      {/* Header */}
+
+      {/*Header*/}
       <View style={[s.header, { backgroundColor: colors.header, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={colors.darkText} />
         </TouchableOpacity>
         <TouchableOpacity style={s.headerUser} onPress={() => navigation.navigate('UserProfile', { userId: otherUserId })}>
           <View style={{ position: 'relative' }}>
-            {userAvatar
-              ? <Image source={{ uri: userAvatar }} style={s.headerAvatar} />
-              : <View style={[s.headerAvatarInit, { backgroundColor: colors.saffron }]}>
-                  <Text style={s.initTxt}>{initials(userName || '')}</Text>
-                </View>
-            }
+            <MsgAvatar uri={userAvatar} name={userName} size={40} colors={colors} />
             {otherStatus.online && <View style={[s.onlineDot, { borderColor: colors.header }]} />}
           </View>
           <View>
@@ -495,59 +541,21 @@ export default function ChatScreen({ navigation, route }: any) {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
-        {/* Messages area — custom wallpaper or color bg */}
+
+        {/*messages area */}
         {isCustom ? (
-          <ImageBackground source={{ uri: customBgUri! }} style={[s.msgArea]} resizeMode="cover">
-            <FlatList ref={flatRef} data={getListData()} keyExtractor={i => (i as any).id}
-              renderItem={renderItem} showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ padding: 16, paddingBottom: 8 }}
-              onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: false })}
-              ListEmptyComponent={
-                <View style={s.emptyChat}>
-                  <Ionicons name="chatbubble-outline" size={48} color={colors.muted} />
-                  <Text style={[s.emptyChatTxt, { color: colors.muted }]}>Say hello to {userName}!</Text>
-                </View>
-              }
-            />
-            {isOtherTyping && (
-              <View style={[s.typingBar, { backgroundColor: colors.card }]}>
-                <View style={[s.typingBubble, { borderColor: colors.border }]}>
-                  <View style={s.dots}>
-                    {[0,1,2].map(i => <View key={i} style={[s.dot, { backgroundColor: colors.muted }]} />)}
-                  </View>
-                </View>
-                <Text style={[s.typingTxt, { color: colors.muted }]}>{userName} is typing...</Text>
-              </View>
-            )}
+          <ImageBackground source={{ uri: customBgUri! }} style={s.msgArea} resizeMode="cover">
+            <MessageList />
+            <TypingIndicator />
           </ImageBackground>
         ) : (
           <View style={[s.msgArea, msgAreaStyle]}>
-          <FlatList ref={flatRef} data={getListData()} keyExtractor={i => (i as any).id}
-            renderItem={renderItem} showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ padding: 16, paddingBottom: 8 }}
-            onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: false })}
-            ListEmptyComponent={
-              <View style={s.emptyChat}>
-                <Ionicons name="chatbubble-outline" size={48} color={colors.muted} />
-                <Text style={[s.emptyChatTxt, { color: colors.muted }]}>Say hello to {userName}!</Text>
-              </View>
-            }
-          />
-          {/* Typing indicator */}
-          {isOtherTyping && (
-            <View style={[s.typingBar, { backgroundColor: colors.card }]}>
-              <View style={[s.typingBubble, { borderColor: colors.border }]}>
-                <View style={s.dots}>
-                  {[0,1,2].map(i => <View key={i} style={[s.dot, { backgroundColor: colors.muted }]} />)}
-                </View>
-              </View>
-              <Text style={[s.typingTxt, { color: colors.muted }]}>{userName} is typing...</Text>
-            </View>
-          )}
-        </View>
+            <MessageList />
+            <TypingIndicator />
+          </View>
         )}
 
-        {/* Edit bar */}
+        {/*edit bar*/}
         {editingMsg && (
           <View style={[s.editBar, { backgroundColor: colors.warmBg, borderTopColor: colors.border }]}>
             <Ionicons name="create-outline" size={16} color={colors.saffron} />
@@ -558,7 +566,7 @@ export default function ChatScreen({ navigation, route }: any) {
           </View>
         )}
 
-        {/* Input bar */}
+        {/*input bar*/}
         <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
           <TouchableOpacity style={s.attachBtn} onPress={() => setShowAttach(true)}>
             {uploadingMedia
@@ -583,7 +591,7 @@ export default function ChatScreen({ navigation, route }: any) {
         </View>
       </KeyboardAvoidingView>
 
-      {/* Attach menu */}
+      {/* attach menu */}
       <Modal visible={showAttach} transparent animationType="slide">
         <Pressable style={s.attachOverlay} onPress={() => setShowAttach(false)}>
           <View style={[s.attachSheet, { backgroundColor: colors.card }]}>
@@ -593,8 +601,7 @@ export default function ChatScreen({ navigation, route }: any) {
               { icon: 'camera-outline', label: 'Take Photo', color: '#E8F5F3', iconColor: '#1A6B5C', onPress: () => sendImage(true) },
               { icon: 'document-outline', label: 'Document', color: '#FFF3E0', iconColor: '#D4651A', onPress: sendDocument },
             ].map((item, i) => (
-              <TouchableOpacity key={i} style={[s.attachItem, { borderBottomColor: i < 2 ? colors.border : 'transparent' }]}
-                onPress={item.onPress}>
+              <TouchableOpacity key={i} style={[s.attachItem, { borderBottomColor: i < 2 ? colors.border : 'transparent' }]} onPress={item.onPress}>
                 <View style={[s.attachIcon, { backgroundColor: item.color }]}>
                   <Ionicons name={item.icon as any} size={22} color={item.iconColor} />
                 </View>
@@ -605,7 +612,7 @@ export default function ChatScreen({ navigation, route }: any) {
         </Pressable>
       </Modal>
 
-      {/* Message options */}
+      {/* ── Message options ── */}
       <Modal visible={selectedMsg !== null} transparent animationType="fade">
         <Pressable style={s.optOverlay} onPress={() => setSelectedMsg(null)}>
           <View style={[s.optSheet, { backgroundColor: colors.card }]}>
@@ -643,7 +650,7 @@ export default function ChatScreen({ navigation, route }: any) {
         </Pressable>
       </Modal>
 
-      {/* Image full-screen viewer */}
+      {/*image full-screen viewer*/}
       <ImageViewer uri={viewerUri || ''} visible={viewerUri !== null} onClose={() => setViewerUri(null)} />
     </View>
   );
@@ -653,9 +660,6 @@ const s = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingTop: 52, paddingBottom: 12, borderBottomWidth: 0.5 },
   headerUser: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headerAvatar: { width: 40, height: 40, borderRadius: 20 },
-  headerAvatarInit: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  initTxt: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
   onlineDot: { position: 'absolute', bottom: 0, right: 0, width: 11, height: 11, borderRadius: 6, backgroundColor: '#27AE60', borderWidth: 2 },
   headerName: { fontSize: 15, fontWeight: '700' },
   headerSub: { fontSize: 12, marginTop: 1 },
@@ -664,40 +668,58 @@ const s = StyleSheet.create({
   dateHeader: { alignItems: 'center', marginVertical: 10 },
   datePill: { borderRadius: 12, paddingHorizontal: 14, paddingVertical: 4 },
   dateTxt: { fontSize: 12 },
-  row: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 10, gap: 8 },
+
+  //message row 
+  row: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 3 },
   rowRight: { justifyContent: 'flex-end' },
   rowLeft: { justifyContent: 'flex-start' },
-  msgAvatar: { width: 28, height: 28, borderRadius: 14 },
-  msgAvatarInit: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+
+  // sender name above bubble
+  senderName: { fontSize: 11, fontWeight: '600', marginBottom: 3, marginLeft: 4 },
+
+  // text bubble
   textBubble: { borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
-  bubbleR: { borderBottomRightRadius: 4 },
-  bubbleL: { borderBottomLeftRadius: 4 },
   bubbleTxt: { fontSize: 15, lineHeight: 21 },
   editedTxt: { fontSize: 10, marginTop: 2 },
-  imgBubble: { borderRadius: 16, overflow: 'hidden', position: 'relative' },
+
+  // image bubble
+  imgBubble: { borderRadius: 18, overflow: 'hidden', position: 'relative' },
   chatImg: { width: 210, height: 210 },
   imgOverlay: { position: 'absolute', bottom: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 12, padding: 4 },
+
+  // time + read receipt
   meta: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3, paddingHorizontal: 4 },
   metaTime: { fontSize: 10 },
+
   emptyChat: { alignItems: 'center', paddingTop: 60, gap: 12 },
   emptyChatTxt: { fontSize: 15 },
+
+  // typing
   typingBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8 },
   typingBubble: { borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1 },
   dots: { flexDirection: 'row', gap: 4 },
   dot: { width: 6, height: 6, borderRadius: 3, opacity: 0.6 },
   typingTxt: { fontSize: 12 },
+
+  // edit bar
   editBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8, borderTopWidth: 0.5 },
   editBarTxt: { flex: 1, fontSize: 13 },
+
+  // input bar
   inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 0.5 },
   attachBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
   input: { flex: 1, borderRadius: 22, paddingHorizontal: 14, paddingVertical: 9, fontSize: 15, maxHeight: 100 },
   sendBtn: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center' },
+
+  // attach sheet
   attachOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
   attachSheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 34 },
   attachTitle: { fontSize: 15, fontWeight: '700', padding: 20, paddingBottom: 12 },
   attachItem: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 0.5 },
   attachIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   attachLabel: { fontSize: 15, fontWeight: '500' },
+
+  // options sheet
   optOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
   optSheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 30 },
   optPreview: { padding: 16, borderBottomWidth: 0.5 },

@@ -4,6 +4,7 @@ import {
   TextInput, ScrollView, ActivityIndicator,
   Alert, Image, Modal, FlatList, Dimensions, Platform,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import firestore from '@react-native-firebase/firestore';
@@ -20,7 +21,7 @@ const EVENT_CATEGORIES = ['Exhibition', 'Workshop', 'Festival', 'Concert', 'Cult
 
 interface MediaItem { uri: string; type: 'image' | 'video'; name: string; }
 
-//post upload 
+// post upload
 function PostUpload({ navigation, colors, t }: any) {
   const { user } = useAuthStore();
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
@@ -55,18 +56,9 @@ function PostUpload({ navigation, colors, t }: any) {
   };
 
   const handlePost = async () => {
-    if (!mediaItems.length) {
-      Alert.alert(t.errorTitle, t.selectMediaAlert);
-      return;
-    }
-    if (!title.trim()) {
-      Alert.alert(t.errorTitle, t.addTitleAlert);
-      return;
-    }
-    if (!category) {
-      Alert.alert(t.errorTitle, t.selectCategoryAlert);
-      return;
-    }
+    if (!mediaItems.length) { Alert.alert(t.errorTitle, t.selectMediaAlert); return; }
+    if (!title.trim()) { Alert.alert(t.errorTitle, t.addTitleAlert); return; }
+    if (!category) { Alert.alert(t.errorTitle, t.selectCategoryAlert); return; }
     setLoading(true);
     try {
       const uploaded: { url: string; type: 'image' | 'video' }[] = [];
@@ -119,20 +111,15 @@ function PostUpload({ navigation, colors, t }: any) {
       <TouchableOpacity
         style={[styles.mediaPickerArea, { borderColor: colors.saffron }]}
         onPress={pickMedia}
-        activeOpacity={0.85}
-      >
+        activeOpacity={0.85}>
         <View style={[styles.mediaPickerInner, { backgroundColor: colors.warmBg }]}>
           <View style={[styles.uploadCircle, { backgroundColor: colors.offwhite }]}>
             <Ionicons name="cloud-upload-outline" size={32} color={colors.saffron} />
           </View>
           <Text style={[styles.mediaPickerTitle, { color: colors.darkText }]}>
-            {mediaItems.length > 0
-              ? `${t.addMoreMedia} (${mediaItems.length}/10)`
-              : t.uploadArtwork}
+            {mediaItems.length > 0 ? `${t.addMoreMedia} (${mediaItems.length}/10)` : t.uploadArtwork}
           </Text>
-          <Text style={[styles.mediaPickerSub, { color: colors.muted }]}>
-            {t.mediaPickerSub}
-          </Text>
+          <Text style={[styles.mediaPickerSub, { color: colors.muted }]}>{t.mediaPickerSub}</Text>
         </View>
       </TouchableOpacity>
 
@@ -163,8 +150,7 @@ function PostUpload({ navigation, colors, t }: any) {
                 )}
                 <TouchableOpacity
                   style={styles.removeThumb}
-                  onPress={() => setMediaItems(prev => prev.filter((_, i) => i !== index))}
-                >
+                  onPress={() => setMediaItems(prev => prev.filter((_, i) => i !== index))}>
                   <Ionicons name="close-circle" size={20} color="#FF4444" />
                 </TouchableOpacity>
               </View>
@@ -179,36 +165,25 @@ function PostUpload({ navigation, colors, t }: any) {
       </Text>
       <TextInput
         style={[styles.input, { backgroundColor: colors.card, color: colors.darkText, borderColor: colors.border }]}
-        value={title}
-        onChangeText={setTitle}
-        placeholder={t.titlePlaceholder}
-        placeholderTextColor={colors.muted}
-        maxLength={100}
+        value={title} onChangeText={setTitle}
+        placeholder={t.titlePlaceholder} placeholderTextColor={colors.muted} maxLength={100}
       />
 
       {/* Description */}
       <Text style={[styles.label, { color: colors.darkText }]}>{t.artDescription}</Text>
       <TextInput
         style={[styles.input, styles.textArea, { backgroundColor: colors.card, color: colors.darkText, borderColor: colors.border }]}
-        value={description}
-        onChangeText={setDescription}
-        placeholder={t.descriptionPlaceholder}
-        placeholderTextColor={colors.muted}
-        multiline
-        numberOfLines={4}
-        textAlignVertical="top"
-        maxLength={500}
+        value={description} onChangeText={setDescription}
+        placeholder={t.descriptionPlaceholder} placeholderTextColor={colors.muted}
+        multiline numberOfLines={4} textAlignVertical="top" maxLength={500}
       />
 
       {/* Techniques */}
       <Text style={[styles.label, { color: colors.darkText }]}>{t.artTechniques}</Text>
       <TextInput
         style={[styles.input, { backgroundColor: colors.card, color: colors.darkText, borderColor: colors.border }]}
-        value={techniques}
-        onChangeText={setTechniques}
-        placeholder={t.techniquesPlaceholder}
-        placeholderTextColor={colors.muted}
-        maxLength={300}
+        value={techniques} onChangeText={setTechniques}
+        placeholder={t.techniquesPlaceholder} placeholderTextColor={colors.muted} maxLength={300}
       />
 
       {/* Category */}
@@ -217,8 +192,7 @@ function PostUpload({ navigation, colors, t }: any) {
       </Text>
       <TouchableOpacity
         style={[styles.input, styles.selector, { backgroundColor: colors.card, borderColor: colors.border }]}
-        onPress={() => setShowCategoryModal(true)}
-      >
+        onPress={() => setShowCategoryModal(true)}>
         <Text style={{ color: category ? colors.darkText : colors.muted, fontSize: 15 }}>
           {category || t.selectCategory}
         </Text>
@@ -236,18 +210,13 @@ function PostUpload({ navigation, colors, t }: any) {
       {/* Submit */}
       <TouchableOpacity
         style={[styles.submitBtn, { backgroundColor: colors.saffron }, loading && { opacity: 0.6 }]}
-        onPress={handlePost}
-        disabled={loading}
-      >
-        {loading
-          ? <ActivityIndicator color="#fff" />
-          : (
-            <View style={styles.submitBtnInner}>
-              <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
-              <Text style={styles.submitBtnTxt}>{t.shareArtwork}</Text>
-            </View>
-          )
-        }
+        onPress={handlePost} disabled={loading}>
+        {loading ? <ActivityIndicator color="#fff" /> : (
+          <View style={styles.submitBtnInner}>
+            <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
+            <Text style={styles.submitBtnTxt}>{t.shareArtwork}</Text>
+          </View>
+        )}
       </TouchableOpacity>
 
       {/* Category Modal */}
@@ -264,18 +233,9 @@ function PostUpload({ navigation, colors, t }: any) {
               {FOLK_CATEGORIES.map(cat => (
                 <TouchableOpacity
                   key={cat}
-                  style={[
-                    styles.modalItem,
-                    { borderBottomColor: colors.border },
-                    category === cat && { backgroundColor: colors.warmBg },
-                  ]}
-                  onPress={() => { setCategory(cat); setShowCategoryModal(false); }}
-                >
-                  <Text style={[
-                    styles.modalItemTxt,
-                    { color: colors.darkText },
-                    category === cat && { color: colors.saffron, fontWeight: '600' },
-                  ]}>
+                  style={[styles.modalItem, { borderBottomColor: colors.border }, category === cat && { backgroundColor: colors.warmBg }]}
+                  onPress={() => { setCategory(cat); setShowCategoryModal(false); }}>
+                  <Text style={[styles.modalItemTxt, { color: colors.darkText }, category === cat && { color: colors.saffron, fontWeight: '600' }]}>
                     {cat}
                   </Text>
                   {category === cat && <Ionicons name="checkmark" size={18} color={colors.saffron} />}
@@ -290,7 +250,7 @@ function PostUpload({ navigation, colors, t }: any) {
   );
 }
 
-//event upload 
+// event upload
 function EventUpload({ navigation, colors, t }: any) {
   const { user, userProfile } = useAuthStore();
   const [title, setTitle] = useState('');
@@ -333,12 +293,8 @@ function EventUpload({ navigation, colors, t }: any) {
       Alert.alert(t.eventCreated, t.eventLive, [{
         text: t.okBtn,
         onPress: () => {
-          setTitle('');
-          setDescription('');
-          setLocation('');
-          setCategory('');
-          setDate(new Date());
-          setImageUri(null);
+          setTitle(''); setDescription(''); setLocation('');
+          setCategory(''); setDate(new Date()); setImageUri(null);
           navigation.navigate('Home');
         },
       }]);
@@ -360,8 +316,7 @@ function EventUpload({ navigation, colors, t }: any) {
       {/* Event banner image */}
       <TouchableOpacity
         style={[styles.eventImgPicker, { borderColor: colors.saffron, backgroundColor: colors.warmBg }]}
-        onPress={pickImage}
-      >
+        onPress={pickImage}>
         {imageUri
           ? <Image source={{ uri: imageUri }} style={styles.eventImgPreview} />
           : (
@@ -384,11 +339,8 @@ function EventUpload({ navigation, colors, t }: any) {
       </Text>
       <TextInput
         style={[styles.input, { backgroundColor: colors.card, color: colors.darkText, borderColor: colors.border }]}
-        value={title}
-        onChangeText={setTitle}
-        placeholder={t.eventTitlePlaceholder}
-        placeholderTextColor={colors.muted}
-        maxLength={100}
+        value={title} onChangeText={setTitle}
+        placeholder={t.eventTitlePlaceholder} placeholderTextColor={colors.muted} maxLength={100}
       />
 
       {/* Category */}
@@ -397,8 +349,7 @@ function EventUpload({ navigation, colors, t }: any) {
       </Text>
       <TouchableOpacity
         style={[styles.input, styles.selector, { backgroundColor: colors.card, borderColor: colors.border }]}
-        onPress={() => setShowCategoryModal(true)}
-      >
+        onPress={() => setShowCategoryModal(true)}>
         <Text style={{ color: category ? colors.darkText : colors.muted, fontSize: 15 }}>
           {category || t.selectEventType}
         </Text>
@@ -411,8 +362,7 @@ function EventUpload({ navigation, colors, t }: any) {
       </Text>
       <TouchableOpacity
         style={[styles.input, styles.selector, { backgroundColor: colors.card, borderColor: colors.border }]}
-        onPress={() => setShowDatePicker(true)}
-      >
+        onPress={() => setShowDatePicker(true)}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Ionicons name="calendar-outline" size={18} color={colors.saffron} />
           <Text style={{ color: colors.darkText, fontSize: 15 }}>{formatDate(date)}</Text>
@@ -424,8 +374,7 @@ function EventUpload({ navigation, colors, t }: any) {
       <Text style={[styles.label, { color: colors.darkText }]}>{t.eventTime}</Text>
       <TouchableOpacity
         style={[styles.input, styles.selector, { backgroundColor: colors.card, borderColor: colors.border }]}
-        onPress={() => setShowTimePicker(true)}
-      >
+        onPress={() => setShowTimePicker(true)}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Ionicons name="time-outline" size={18} color={colors.saffron} />
           <Text style={{ color: colors.darkText, fontSize: 15 }}>{formatTimeDisplay(date)}</Text>
@@ -435,32 +384,22 @@ function EventUpload({ navigation, colors, t }: any) {
 
       {showDatePicker && (
         <DateTimePicker
-          value={date}
-          mode="date"
+          value={date} mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           minimumDate={new Date()}
           onChange={(_, d) => {
             setShowDatePicker(false);
-            if (d) setDate(prev => {
-              const nd = new Date(d);
-              nd.setHours(prev.getHours(), prev.getMinutes());
-              return nd;
-            });
+            if (d) setDate(prev => { const nd = new Date(d); nd.setHours(prev.getHours(), prev.getMinutes()); return nd; });
           }}
         />
       )}
       {showTimePicker && (
         <DateTimePicker
-          value={date}
-          mode="time"
+          value={date} mode="time"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}
           onChange={(_, d) => {
             setShowTimePicker(false);
-            if (d) setDate(prev => {
-              const nd = new Date(prev);
-              nd.setHours(d.getHours(), d.getMinutes());
-              return nd;
-            });
+            if (d) setDate(prev => { const nd = new Date(prev); nd.setHours(d.getHours(), d.getMinutes()); return nd; });
           }}
         />
       )}
@@ -471,41 +410,29 @@ function EventUpload({ navigation, colors, t }: any) {
       </Text>
       <TextInput
         style={[styles.input, { backgroundColor: colors.card, color: colors.darkText, borderColor: colors.border }]}
-        value={location}
-        onChangeText={setLocation}
-        placeholder={t.eventLocationPlaceholder}
-        placeholderTextColor={colors.muted}
+        value={location} onChangeText={setLocation}
+        placeholder={t.eventLocationPlaceholder} placeholderTextColor={colors.muted}
       />
 
       {/* Description */}
       <Text style={[styles.label, { color: colors.darkText }]}>{t.artDescription}</Text>
       <TextInput
         style={[styles.input, styles.textArea, { backgroundColor: colors.card, color: colors.darkText, borderColor: colors.border }]}
-        value={description}
-        onChangeText={setDescription}
-        placeholder={t.eventDescriptionPlaceholder}
-        placeholderTextColor={colors.muted}
-        multiline
-        numberOfLines={4}
-        textAlignVertical="top"
-        maxLength={500}
+        value={description} onChangeText={setDescription}
+        placeholder={t.eventDescriptionPlaceholder} placeholderTextColor={colors.muted}
+        multiline numberOfLines={4} textAlignVertical="top" maxLength={500}
       />
 
       {/* Submit */}
       <TouchableOpacity
         style={[styles.submitBtn, { backgroundColor: colors.saffron }, loading && { opacity: 0.6 }]}
-        onPress={handleCreateEvent}
-        disabled={loading}
-      >
-        {loading
-          ? <ActivityIndicator color="#fff" />
-          : (
-            <View style={styles.submitBtnInner}>
-              <Ionicons name="calendar-outline" size={20} color="#fff" />
-              <Text style={styles.submitBtnTxt}>{t.createEventBtn}</Text>
-            </View>
-          )
-        }
+        onPress={handleCreateEvent} disabled={loading}>
+        {loading ? <ActivityIndicator color="#fff" /> : (
+          <View style={styles.submitBtnInner}>
+            <Ionicons name="calendar-outline" size={20} color="#fff" />
+            <Text style={styles.submitBtnTxt}>{t.createEventBtn}</Text>
+          </View>
+        )}
       </TouchableOpacity>
 
       {/* Category Modal */}
@@ -522,18 +449,9 @@ function EventUpload({ navigation, colors, t }: any) {
               {EVENT_CATEGORIES.map(cat => (
                 <TouchableOpacity
                   key={cat}
-                  style={[
-                    styles.modalItem,
-                    { borderBottomColor: colors.border },
-                    category === cat && { backgroundColor: colors.warmBg },
-                  ]}
-                  onPress={() => { setCategory(cat); setShowCategoryModal(false); }}
-                >
-                  <Text style={[
-                    styles.modalItemTxt,
-                    { color: colors.darkText },
-                    category === cat && { color: colors.saffron, fontWeight: '600' },
-                  ]}>
+                  style={[styles.modalItem, { borderBottomColor: colors.border }, category === cat && { backgroundColor: colors.warmBg }]}
+                  onPress={() => { setCategory(cat); setShowCategoryModal(false); }}>
+                  <Text style={[styles.modalItemTxt, { color: colors.darkText }, category === cat && { color: colors.saffron, fontWeight: '600' }]}>
                     {cat}
                   </Text>
                   {category === cat && <Ionicons name="checkmark" size={18} color={colors.saffron} />}
@@ -548,17 +466,29 @@ function EventUpload({ navigation, colors, t }: any) {
   );
 }
 
-//main upload screen 
+// main upload screen
 export default function UploadScreen({ navigation }: any) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { t } = useLang();
   const [activeTab, setActiveTab] = useState<'post' | 'event'>('post');
 
+  const gradientColors: string[] = isDark
+    ? ['#1A1008', '#2A1C0E', '#3A2814', '#4A341C']
+    : ['#FFC58A', '#FFD9A8', '#FFEAC8', '#FFF6E5'];
+
   return (
-    <View style={[styles.container, { backgroundColor: colors.offwhite }]}>
+    <View style={styles.container}>
+      {/* Gradient background */}
+      <LinearGradient
+        colors={gradientColors}
+        locations={[0, 0.30, 0.70, 1]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
 
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.header, borderBottomColor: colors.border }]}>
+      <View style={[styles.header, { backgroundColor: 'transparent', borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={colors.darkText} />
         </TouchableOpacity>
@@ -569,16 +499,12 @@ export default function UploadScreen({ navigation }: any) {
       </View>
 
       {/* Tab switcher */}
-      <View style={[styles.tabRow, { backgroundColor: colors.header, borderBottomColor: colors.border }]}>
+      <View style={[styles.tabRow, { backgroundColor: 'transparent', borderBottomColor: colors.border }]}>
         {(['post', 'event'] as const).map(tab => (
           <TouchableOpacity
             key={tab}
-            style={[
-              styles.tabBtn,
-              activeTab === tab && [styles.tabBtnActive, { borderBottomColor: colors.saffron }],
-            ]}
-            onPress={() => setActiveTab(tab)}
-          >
+            style={[styles.tabBtn, activeTab === tab && [styles.tabBtnActive, { borderBottomColor: colors.saffron }]]}
+            onPress={() => setActiveTab(tab)}>
             <Ionicons
               name={tab === 'post' ? 'images-outline' : 'calendar-outline'}
               size={15}
@@ -624,10 +550,7 @@ const styles = StyleSheet.create({
   mainBadge: { position: 'absolute', top: 4, left: 4, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2 },
   mainBadgeTxt: { color: '#fff', fontSize: 9, fontWeight: 'bold' },
   removeThumb: { position: 'absolute', top: 2, right: 2, backgroundColor: '#fff', borderRadius: 10 },
-  eventImgPicker: {
-    height: 160, borderRadius: 14, borderWidth: 1.5, borderStyle: 'dashed',
-    overflow: 'hidden', marginBottom: 20, position: 'relative',
-  },
+  eventImgPicker: { height: 160, borderRadius: 14, borderWidth: 1.5, borderStyle: 'dashed', overflow: 'hidden', marginBottom: 20, position: 'relative' },
   eventImgPreview: { width: '100%', height: '100%', resizeMode: 'cover' },
   eventImgPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
   removeEventImg: { position: 'absolute', top: 8, right: 8, backgroundColor: '#fff', borderRadius: 12 },
@@ -642,14 +565,8 @@ const styles = StyleSheet.create({
   submitBtnTxt: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '70%', paddingBottom: 40 },
-  modalHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    padding: 20, borderBottomWidth: 0.5,
-  },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 0.5 },
   modalTitle: { fontSize: 18, fontWeight: 'bold' },
-  modalItem: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 0.5,
-  },
+  modalItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 0.5 },
   modalItemTxt: { fontSize: 15 },
 });

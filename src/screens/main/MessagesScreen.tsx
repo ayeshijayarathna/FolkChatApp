@@ -4,6 +4,7 @@ import {
   FlatList, Image, RefreshControl, ActivityIndicator,
   Alert, Animated, PanResponder, Dimensions,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import firestore from '@react-native-firebase/firestore';
 import { useTheme } from '../../context/ThemeContext';
@@ -141,14 +142,18 @@ function ConvRow({ item, colors, user, navigation, onDelete }: {
   );
 }
 
-//main screen
+// main screen
 export default function MessagesScreen({ navigation }: any) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { t } = useLang();
   const { user } = useAuthStore();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const gradientColors: string[] = isDark
+    ? ['#1A1008', '#2A1C0E', '#3A2814', '#4A341C']
+    : ['#FFC58A', '#FFD9A8', '#FFEAC8', '#FFF6E5'];
 
   useEffect(() => {
     if (!user?.uid) { setLoading(false); return; }
@@ -184,12 +189,10 @@ export default function MessagesScreen({ navigation }: any) {
 
   const deleteConversation = async (chatId: string) => {
     try {
-      // delete all messages for this user
       const snap = await firestore().collection('chats').doc(chatId).collection('messages').get();
       await Promise.all(snap.docs.map(d =>
         d.ref.update({ deletedFor: firestore.FieldValue.arrayUnion(user?.uid) })
       ));
-      // remove user from participants view by hiding chat
       await firestore().collection('chats').doc(chatId).update({
         [`unreadCount.${user?.uid}`]: 0,
         lastMessage: '',
@@ -201,9 +204,18 @@ export default function MessagesScreen({ navigation }: any) {
   const totalUnread = conversations.reduce((sum, c) => sum + c.unread, 0);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.offwhite }]}>
+    <View style={styles.container}>
+      {/* Gradient background */}
+      <LinearGradient
+        colors={gradientColors}
+        locations={[0, 0.30, 0.70, 1]}
+        style={StyleSheet.absoluteFill}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+      />
+
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.header, borderBottomColor: colors.border }]}>
+      <View style={[styles.header, { backgroundColor: 'transparent', borderBottomColor: colors.border }]}>
         <View>
           <Text style={[styles.headerTitle, { color: colors.darkText }]}>{t.messages}</Text>
           {totalUnread > 0 && (
@@ -221,7 +233,7 @@ export default function MessagesScreen({ navigation }: any) {
 
       {/* Swipe hint */}
       {conversations.length > 0 && (
-        <View style={[styles.swipeHint, { backgroundColor: colors.warmBg }]}>
+        <View style={[styles.swipeHint, { backgroundColor: 'transparent' }]}>
           <Ionicons name="arrow-back-outline" size={12} color={colors.muted} />
           <Text style={[styles.swipeHintTxt, { color: colors.muted }]}>Swipe left to delete</Text>
         </View>
@@ -241,8 +253,15 @@ export default function MessagesScreen({ navigation }: any) {
               navigation={navigation} onDelete={deleteConversation}
             />
           )}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => setRefreshing(true)} colors={[colors.saffron]} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => setRefreshing(true)}
+              colors={[colors.saffron]}
+            />
+          }
           showsVerticalScrollIndicator={false}
+          style={{ backgroundColor: 'transparent' }}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <View style={[styles.emptyIconWrap, { backgroundColor: colors.warmBg }]}>
