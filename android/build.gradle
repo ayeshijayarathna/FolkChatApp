@@ -10,6 +10,8 @@ buildscript {
     repositories {
         google()
         mavenCentral()
+        
+        maven { url 'https://artifactory.agoralab.co/artifactory/maven-public/' }
     }
     dependencies {
         classpath("com.android.tools.build:gradle")

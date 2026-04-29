@@ -2,9 +2,9 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ScrollView, Image, Dimensions, RefreshControl,
-  Modal, Alert, FlatList, Pressable,
+  Modal, Alert, FlatList, Pressable, Linking,
 } from 'react-native';
-import Ionicons from '@react-native-vector-icons/ionicons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import firestore from '@react-native-firebase/firestore';
 import Video from 'react-native-video';
 import { useTheme } from '../../context/ThemeContext';
@@ -87,6 +87,53 @@ const sw = StyleSheet.create({
   counter: { backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 3 },
   counterTxt: { color: '#fff', fontSize: 12, fontWeight: '600' },
 });
+
+//social link button
+function SocialLinkButton({ platform, url, colors }: {
+  platform: 'facebook' | 'instagram';
+  url: string;
+  colors: any;
+}) {
+  if (!url) return null;
+
+  const config = {
+    facebook: {
+      icon: 'logo-facebook' as const,
+      color: '#1877F2',
+      bg: '#1877F210',
+      label: 'Facebook',
+    },
+    instagram: {
+      icon: 'logo-instagram' as const,
+      color: '#E1306C',
+      bg: '#E1306C10',
+      label: 'Instagram',
+    },
+  }[platform];
+
+  const handleOpen = async () => {
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Cannot open', `Could not open ${config.label} link.`);
+      }
+    } catch {
+      Alert.alert('Error', `Failed to open ${config.label}`);
+    }
+  };
+
+  return (
+    <TouchableOpacity
+      style={[styles.socialBtn, { backgroundColor: config.bg }]}
+      onPress={handleOpen}
+      activeOpacity={0.75}>
+      <Ionicons name={config.icon} size={17} color={config.color} />
+      <Text style={[styles.socialBtnText, { color: config.color }]}>{config.label}</Text>
+    </TouchableOpacity>
+  );
+}
 
 export default function UserProfileScreen({ navigation, route }: any) {
   const { userId } = route.params;
@@ -204,7 +251,10 @@ export default function UserProfileScreen({ navigation, route }: any) {
     );
   };
 
-  // header content for flatList
+  const hasFacebook = !!profile?.socialLinks?.facebook;
+  const hasInstagram = !!profile?.socialLinks?.instagram;
+  const hasSocialLinks = hasFacebook || hasInstagram;
+
   const renderHeader = () => (
     <>
       <View style={[styles.header, { backgroundColor: colors.header }]}>
@@ -239,7 +289,29 @@ export default function UserProfileScreen({ navigation, route }: any) {
         </View>
         <Text style={[styles.name, { color: colors.darkText }]}>{profile?.name || 'Artist Name'}</Text>
         <Text style={[styles.category, { color: colors.saffron }]}>{profile?.artistCategory || 'Folk Artist'}</Text>
-        {profile?.bio ? <Text style={[styles.bio, { color: colors.muted }]}>{profile.bio}</Text> : null}
+
+        {profile?.bio ? (
+          <Text style={[styles.bio, { color: colors.muted }]}>{profile.bio}</Text>
+        ) : null}
+
+        {hasSocialLinks && (
+          <View style={styles.socialLinksRow}>
+            {hasFacebook && (
+              <SocialLinkButton
+                platform="facebook"
+                url={profile.socialLinks.facebook}
+                colors={colors}
+              />
+            )}
+            {hasInstagram && (
+              <SocialLinkButton
+                platform="instagram"
+                url={profile.socialLinks.instagram}
+                colors={colors}
+              />
+            )}
+          </View>
+        )}
 
         <View style={[styles.statsRow, { backgroundColor: colors.offwhite }]}>
           <View style={styles.statItem}>
@@ -318,7 +390,6 @@ export default function UserProfileScreen({ navigation, route }: any) {
     </>
   );
 
-  // empty state
   const renderEmpty = () => (
     <View style={styles.emptyState}>
       <Ionicons name={activeTab === 'posts' ? 'camera-outline' : 'bookmark-outline'} size={48} color={colors.muted} />
@@ -332,7 +403,6 @@ export default function UserProfileScreen({ navigation, route }: any) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.offwhite }]}>
-      {/* flatList with numColumns=3 */}
       <FlatList
         data={dataToShow}
         keyExtractor={(item) => item.id}
@@ -399,7 +469,7 @@ export default function UserProfileScreen({ navigation, route }: any) {
         </View>
       </Modal>
 
-      {/* Post Management*/}
+      {/* Post Management */}
       <Modal visible={postMenuPost !== null} animationType="slide" transparent>
         <Pressable style={styles.menuOverlay} onPress={() => setPostMenuPost(null)}>
           <Pressable style={[styles.menuSheet, { backgroundColor: colors.card }]}>
@@ -435,8 +505,6 @@ export default function UserProfileScreen({ navigation, route }: any) {
                 <Ionicons name="chevron-forward" size={16} color={item.icon === 'trash-outline' ? '#FF4444' : colors.muted} />
               </TouchableOpacity>
             ))}
-
-            {/* cancel button */}
             <TouchableOpacity
               style={styles.menuCancelBtn}
               onPress={() => setPostMenuPost(null)}
@@ -465,7 +533,27 @@ const styles = StyleSheet.create({
   avatarPlaceholder: { width: 90, height: 90, borderRadius: 45, justifyContent: 'center', alignItems: 'center', borderWidth: 3 },
   name: { fontSize: 20, fontWeight: 'bold', marginBottom: 4 },
   category: { fontSize: 14, fontWeight: '500', marginBottom: 8 },
-  bio: { fontSize: 14, lineHeight: 20, marginBottom: 16 },
+  bio: { fontSize: 14, lineHeight: 20, marginBottom: 10 },
+
+  socialLinksRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+    flexWrap: 'wrap',
+  },
+  socialBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+  },
+  socialBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
   statsRow: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, padding: 16, marginBottom: 16, marginTop: 8 },
   statItem: { flex: 1, alignItems: 'center' },
   statNum: { fontSize: 20, fontWeight: 'bold' },
@@ -484,16 +572,8 @@ const styles = StyleSheet.create({
   tab: { flex: 1, alignItems: 'center', paddingVertical: 14 },
   tabActive: { borderBottomWidth: 2 },
   gridHint: { fontSize: 11, textAlign: 'center', paddingVertical: 6 },
-  gridRow: {
-    paddingHorizontal: GRID_GAP,
-    gap: GRID_GAP,
-    marginBottom: GRID_GAP,
-  },
-  gridItem: {
-    width: GRID_SIZE,
-    height: GRID_SIZE,
-    position: 'relative',
-  },
+  gridRow: { paddingHorizontal: GRID_GAP, gap: GRID_GAP, marginBottom: GRID_GAP },
+  gridItem: { width: GRID_SIZE, height: GRID_SIZE, position: 'relative' },
   gridImg: { width: '100%', height: '100%' },
   videoGridItem: { width: '100%', height: '100%', backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center' },
   videoGridBadge: { position: 'absolute', top: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 10, padding: 4 },
@@ -532,25 +612,7 @@ const styles = StyleSheet.create({
   menuItemText: { flex: 1 },
   menuItemTitle: { fontSize: 15, fontWeight: '600' },
   menuItemSub: { fontSize: 12, marginTop: 2 },
-  menuCancelBtn: {
-    marginHorizontal: 20,
-    marginTop: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 14,
-    backgroundColor:COLORS.muted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuCancelInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  menuCancelTxt: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-  },
+  menuCancelBtn: { marginHorizontal: 20, marginTop: 16, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 14, backgroundColor: COLORS.muted, alignItems: 'center', justifyContent: 'center' },
+  menuCancelInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  menuCancelTxt: { fontSize: 16, fontWeight: '700', color: '#fff' },
 });

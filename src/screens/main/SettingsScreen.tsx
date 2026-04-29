@@ -4,7 +4,7 @@ import {
   ScrollView, Alert, Image, Modal, Switch,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import Ionicons from '@react-native-vector-icons/ionicons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { useTheme } from '../../context/ThemeContext';

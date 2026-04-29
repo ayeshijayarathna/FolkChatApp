@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { createBottomTabNavigator, BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import Ionicons from '@react-native-vector-icons/ionicons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import firestore from '@react-native-firebase/firestore';
 import { useTheme } from '../context/ThemeContext';
 import { useLang } from '../context/LanguageContext';
@@ -98,7 +98,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
   return (
     <View style={s.wrap}>
-      {/* Bar background with curved top corners */}
+      {/* bar background with curved top corners */}
       <View style={[s.bar, {
         backgroundColor: isDark ? colors.tabBar : '#F5E6CC', 
         borderColor: isDark ? colors.saffron : 'white',
@@ -106,7 +106,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         borderLeftWidth: 1.5,
         borderRightWidth: 1.5,
       }]}>
-        {/* Left side */}
+        {/* left side */}
         <View style={s.side}>
           {leftRoutes.map(route => {
             const idx = state.routes.findIndex(r => r.key === route.key);

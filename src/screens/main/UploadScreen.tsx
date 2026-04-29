@@ -5,7 +5,7 @@ import {
   Alert, Image, Modal, FlatList, Dimensions, Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import Ionicons from '@react-native-vector-icons/ionicons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import firestore from '@react-native-firebase/firestore';
 import DateTimePicker from '@react-native-community/datetimepicker';

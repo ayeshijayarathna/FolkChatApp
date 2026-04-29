@@ -2,6 +2,11 @@ import { create } from 'zustand';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 
+interface SocialLinks {
+  facebook?: string;
+  instagram?: string;
+}
+
 interface AuthState {
   user: any;
   userProfile: any;
@@ -26,7 +31,6 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (doc.exists()) {
         set({ userProfile: doc.data() });
       } else {
-        // Document or empty profile is set.
         set({
           userProfile: {
             name: '',
@@ -37,6 +41,10 @@ export const useAuthStore = create<AuthState>((set) => ({
             coverUrl: '',
             followers: [],
             following: [],
+            socialLinks: {
+              facebook: '',
+              instagram: '',
+            } as SocialLinks,
           }
         });
       }

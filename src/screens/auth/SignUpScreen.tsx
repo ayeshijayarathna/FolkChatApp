@@ -9,7 +9,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../../context/ThemeContext';
 import { signUpWithEmail, createUserProfile } from '../../services/firebase';
 import { FOLK_CATEGORIES } from '../../constants/categories';
-import Ionicons from '@react-native-vector-icons/ionicons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const { width, height } = Dimensions.get('window');
 

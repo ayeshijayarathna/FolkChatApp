@@ -5,7 +5,7 @@ import {
   Alert, Image, Modal,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import Ionicons from '@react-native-vector-icons/ionicons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import firestore from '@react-native-firebase/firestore';
 import { useTheme } from '../../context/ThemeContext';
@@ -18,9 +18,12 @@ export default function EditProfileScreen({ navigation }: any) {
   const { colors, isDark } = useTheme();
   const { t } = useLang();
   const { user, userProfile, fetchUserProfile } = useAuthStore();
+
   const [name, setName] = useState(userProfile?.name || '');
   const [bio, setBio] = useState(userProfile?.bio || '');
   const [category, setCategory] = useState(userProfile?.artistCategory || '');
+  const [facebookLink, setFacebookLink] = useState(userProfile?.socialLinks?.facebook || '');
+  const [instagramLink, setInstagramLink] = useState(userProfile?.socialLinks?.instagram || '');
   const [loading, setLoading] = useState(false);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [coverUri, setCoverUri] = useState<string | null>(null);
@@ -75,6 +78,19 @@ export default function EditProfileScreen({ navigation }: any) {
     }
   };
 
+  //validate url
+  const normalizeUrl = (url: string, platform: 'facebook' | 'instagram'): string => {
+    if (!url.trim()) return '';
+    const trimmed = url.trim();
+
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+
+    const username = trimmed.replace('@', '');
+    if (platform === 'facebook') return `https://www.facebook.com/${username}`;
+    if (platform === 'instagram') return `https://www.instagram.com/${username}`;
+    return trimmed;
+  };
+
   const handleSave = async () => {
     if (!name.trim()) { Alert.alert('Error', 'Name cannot be empty'); return; }
     setLoading(true);
@@ -87,7 +103,15 @@ export default function EditProfileScreen({ navigation }: any) {
 
       setUploadProgress('Saving profile...');
       await firestore().collection('users').doc(user?.uid).set({
-        name: name.trim(), bio: bio.trim(), artistCategory: category.trim(), avatarUrl, coverUrl,
+        name: name.trim(),
+        bio: bio.trim(),
+        artistCategory: category.trim(),
+        avatarUrl,
+        coverUrl,
+        socialLinks: {
+          facebook: normalizeUrl(facebookLink, 'facebook'),
+          instagram: normalizeUrl(instagramLink, 'instagram'),
+        },
       }, { merge: true });
 
       await fetchUserProfile(user?.uid);
@@ -199,6 +223,65 @@ export default function EditProfileScreen({ navigation }: any) {
             <Ionicons name="chevron-down" size={18} color={colors.muted} />
           </TouchableOpacity>
 
+          {/* social links*/}
+          <View style={[styles.socialSection, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.socialSectionHeader}>
+              <Ionicons name="share-social-outline" size={18} color={colors.saffron} />
+              <Text style={[styles.socialSectionTitle, { color: colors.darkText }]}>Social Links</Text>
+              <View style={[styles.optionalBadge, { backgroundColor: colors.warmBg }]}>
+                <Text style={[styles.optionalText, { color: colors.muted }]}>Optional</Text>
+              </View>
+            </View>
+
+            {/* Facebook */}
+            <View style={[styles.socialInputRow, { borderColor: colors.border }]}>
+              <View style={[styles.socialIconWrap, { backgroundColor: '#1877F215' }]}>
+                <Ionicons name="logo-facebook" size={20} color="#1877F2" />
+              </View>
+              <TextInput
+                style={[styles.socialInput, { color: colors.darkText }]}
+                value={facebookLink}
+                onChangeText={setFacebookLink}
+                placeholder="facebook.com/yourname or username"
+                placeholderTextColor={colors.muted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+              />
+              {facebookLink.length > 0 && (
+                <TouchableOpacity onPress={() => setFacebookLink('')} style={styles.socialClearBtn}>
+                  <Ionicons name="close-circle" size={18} color={colors.muted} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Instagram */}
+            <View style={[styles.socialInputRow, { borderColor: 'transparent' }]}>
+              <View style={[styles.socialIconWrap, { backgroundColor: '#E1306C15' }]}>
+                <Ionicons name="logo-instagram" size={20} color="#E1306C" />
+              </View>
+              <TextInput
+                style={[styles.socialInput, { color: colors.darkText }]}
+                value={instagramLink}
+                onChangeText={setInstagramLink}
+                placeholder="instagram.com/yourname or @username"
+                placeholderTextColor={colors.muted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+              />
+              {instagramLink.length > 0 && (
+                <TouchableOpacity onPress={() => setInstagramLink('')} style={styles.socialClearBtn}>
+                  <Ionicons name="close-circle" size={18} color={colors.muted} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          <Text style={[styles.socialHint, { color: colors.muted }]}>
+           can put URL or Username(e.g. @yourname)
+          </Text>
+
           {loading && uploadProgress !== '' && (
             <View style={[styles.progressBanner, { backgroundColor: colors.warmBg }]}>
               <ActivityIndicator size="small" color={colors.saffron} />
@@ -283,6 +366,63 @@ const styles = StyleSheet.create({
   input: { borderRadius: 12, padding: 14, fontSize: 15, marginBottom: 20, borderWidth: 1 },
   bioInput: { height: 100 },
   categorySelector: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+
+  socialSection: {
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  socialSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  socialSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  optionalBadge: {
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  optionalText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  socialInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopWidth: 0.5,
+  },
+  socialIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  socialInput: {
+    flex: 1,
+    fontSize: 14,
+    paddingVertical: 4,
+  },
+  socialClearBtn: {
+    padding: 2,
+  },
+  socialHint: {
+    fontSize: 12,
+    marginBottom: 20,
+    marginTop: 2,
+  },
+
   progressBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 10, padding: 12, marginBottom: 16 },
   progressText: { fontSize: 13 },
   previewBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#E8F5F3', borderRadius: 10, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: '#B2DDD6' },

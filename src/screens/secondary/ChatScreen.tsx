@@ -3,9 +3,9 @@ import {
   View, Text, StyleSheet, TouchableOpacity,
   FlatList, Image, TextInput, KeyboardAvoidingView,
   Platform, Alert, Modal, Pressable, ActivityIndicator,
-  Dimensions, PermissionsAndroid, ImageBackground,
+  Dimensions, PermissionsAndroid, ImageBackground, Linking,
 } from 'react-native';
-import Ionicons from '@react-native-vector-icons/ionicons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import firestore from '@react-native-firebase/firestore';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -20,11 +20,8 @@ interface Message {
   id: string;
   senderId: string;
   text: string;
-  type: 'text' | 'image' | 'document';
+  type: 'text' | 'image';
   imageUrl?: string;
-  documentUrl?: string;
-  documentName?: string;
-  documentSize?: string;
   createdAt: any;
   edited: boolean;
   deletedFor: string[];
@@ -63,7 +60,6 @@ const BG_MAP: Record<string, string> = {
   forest: '#dff2e1', sunset: '#fff0e0', lavender: '#f0e5f5',
 };
 
-//image full screen viewer
 function ImageViewer({ uri, visible, onClose }: { uri: string; visible: boolean; onClose: () => void }) {
   const downloadImage = async () => {
     try {
@@ -113,40 +109,6 @@ const iv = StyleSheet.create({
   image: { width: SW, height: SH * 0.8 },
 });
 
-// document bubble
-function DocumentBubble({ msg, mine, colors }: { msg: Message; mine: boolean; colors: any }) {
-  const openDoc = async () => {
-    try { const { Linking } = require('react-native'); if (msg.documentUrl) await Linking.openURL(msg.documentUrl); }
-    catch { Alert.alert('Error', 'Cannot open document'); }
-  };
-  const ext = (msg.documentName || 'file').split('.').pop()?.toUpperCase() || 'FILE';
-  const extColors: Record<string, string> = { PDF: '#FF4444', DOC: '#2B5797', DOCX: '#2B5797', XLS: '#1D6F42', XLSX: '#1D6F42', PPT: '#D24726', PPTX: '#D24726', TXT: '#666' };
-  return (
-    <TouchableOpacity
-      style={[db.bubble, mine ? { backgroundColor: colors.saffron } : { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 }]}
-      onPress={openDoc} activeOpacity={0.8}>
-      <View style={[db.iconWrap, { backgroundColor: extColors[ext] || '#888' }]}>
-        <Text style={db.extTxt}>{ext}</Text>
-      </View>
-      <View style={db.info}>
-        <Text style={[db.name, { color: mine ? '#fff' : colors.darkText }]} numberOfLines={2}>{msg.documentName || 'Document'}</Text>
-        {msg.documentSize ? <Text style={[db.size, { color: mine ? 'rgba(255,255,255,0.7)' : colors.muted }]}>{msg.documentSize}</Text> : null}
-      </View>
-      <Ionicons name="open-outline" size={18} color={mine ? 'rgba(255,255,255,0.8)' : colors.muted} />
-    </TouchableOpacity>
-  );
-}
-
-const db = StyleSheet.create({
-  bubble: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 16, padding: 12, maxWidth: 250 },
-  iconWrap: { width: 38, height: 38, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  extTxt: { color: '#fff', fontSize: 10, fontWeight: '900' },
-  info: { flex: 1 },
-  name: { fontSize: 13, fontWeight: '600', lineHeight: 18 },
-  size: { fontSize: 11, marginTop: 2 },
-});
-
-//avatar component 
 function MsgAvatar({ uri, name, size = 32, colors }: { uri?: string; name?: string; size?: number; colors: any }) {
   if (uri) {
     return <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} />;
@@ -164,7 +126,7 @@ function MsgAvatar({ uri, name, size = 32, colors }: { uri?: string; name?: stri
   );
 }
 
-//main Chat Screen 
+// main chat screen
 export default function ChatScreen({ navigation, route }: any) {
   const { colors } = useTheme();
   const { user, userProfile } = useAuthStore();
@@ -183,6 +145,7 @@ export default function ChatScreen({ navigation, route }: any) {
   const [viewerUri, setViewerUri] = useState<string | null>(null);
   const [chatBg, setChatBg] = useState('default');
   const [customBgUri, setCustomBgUri] = useState<string | null>(null);
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const flatRef = useRef<FlatList>(null);
   const typingTimer = useRef<any>(null);
 
@@ -293,32 +256,9 @@ export default function ChatScreen({ navigation, route }: any) {
         text: '', type: 'image', imageUrl: url,
         createdAt: firestore.FieldValue.serverTimestamp(), edited: false, deletedFor: [],
       });
-      await pushChatMeta('Photo');
+      await pushChatMeta('📷 Photo');
     } catch { Alert.alert('Error', 'Failed to send image'); }
     finally { setUploadingMedia(false); }
-  };
-
-  const sendDocument = async () => {
-    setShowAttach(false);
-    try {
-      const result = await launchImageLibrary({ mediaType: 'mixed', quality: 0.9, selectionLimit: 1 });
-      if (!result.assets?.[0]?.uri) return;
-      const file = result.assets[0];
-      setUploadingMedia(true);
-      const isVideo = file.type?.startsWith('video');
-      const url = await uploadToCloudinary(file.uri!, isVideo ? 'video' : 'image');
-      const fileName = file.fileName || 'File';
-      const sizeKB = file.fileSize ? `${(file.fileSize / 1024).toFixed(1)} KB` : '';
-      await firestore().collection('chats').doc(chatId).collection('messages').add({
-        senderId: user?.uid, senderName: userProfile?.name || 'User', senderAvatar: userProfile?.avatarUrl || '',
-        text: '', type: isVideo ? 'image' : 'document',
-        ...(isVideo ? { imageUrl: url } : { documentUrl: url, documentName: fileName, documentSize: sizeKB }),
-        createdAt: firestore.FieldValue.serverTimestamp(), edited: false, deletedFor: [],
-      });
-      await pushChatMeta(`📄 ${fileName}`);
-    } catch (e: any) {
-      if (e?.code !== 'E_PICKER_CANCELLED') Alert.alert('Error', 'Failed to send file');
-    } finally { setUploadingMedia(false); }
   };
 
   const deleteMessage = (msg: Message) => {
@@ -339,6 +279,7 @@ export default function ChatScreen({ navigation, route }: any) {
   };
 
   const clearChat = () => {
+    setShowHeaderMenu(false);
     Alert.alert('Clear Chat', 'Clear all messages for you?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Clear', style: 'destructive', onPress: async () => {
@@ -346,6 +287,20 @@ export default function ChatScreen({ navigation, route }: any) {
         await Promise.all(snap.docs.map(d => d.ref.update({ deletedFor: firestore.FieldValue.arrayUnion(user?.uid) })));
       }},
     ]);
+  };
+
+  const handleVoiceCall = () => {
+    setShowHeaderMenu(false);
+    navigation.navigate('VoiceCall', {
+      userId: otherUserId, userName, userAvatar, chatId, isIncoming: false,
+    });
+  };
+
+  const handleVideoCall = () => {
+    setShowHeaderMenu(false);
+    navigation.navigate('VideoCall', {
+      userId: otherUserId, userName, userAvatar, chatId, isIncoming: false,
+    });
   };
 
   type ListItem = Message | { type: 'header'; date: string; id: string };
@@ -370,7 +325,6 @@ export default function ChatScreen({ navigation, route }: any) {
     : !isCustom ? { backgroundColor: colors.warmBg }
     : {};
 
-  // render each message
   const renderItem = ({ item, index }: { item: ListItem; index: number }) => {
     if ((item as any).type === 'header') {
       return (
@@ -387,16 +341,13 @@ export default function ChatScreen({ navigation, route }: any) {
     const listData = getListData();
     const prevItem = index > 0 ? listData[index - 1] : null;
     const prevMsg = prevItem && !(prevItem as any).type ? prevItem as Message : null;
-
     const nextItem = index < listData.length - 1 ? listData[index + 1] : null;
     const nextMsg = nextItem && !(nextItem as any).type ? nextItem as Message : null;
     const isLastInGroup = !nextMsg || nextMsg.senderId !== msg.senderId;
     const isFirstInGroup = !prevMsg || prevMsg.senderId !== msg.senderId;
 
-    // avatar placeholder width to keep bubble alignment consistent
     const AVATAR_SIZE = 32;
     const AVATAR_GAP = 8;
-    const avatarPlaceholderWidth = AVATAR_SIZE + AVATAR_GAP;
 
     return (
       <TouchableOpacity
@@ -404,25 +355,17 @@ export default function ChatScreen({ navigation, route }: any) {
         activeOpacity={0.9}
         style={[s.row, mine ? s.rowRight : s.rowLeft]}>
 
-        {/*other person's avatar (left side)*/}
         {!mine && (
           <View style={{ width: AVATAR_SIZE, marginRight: AVATAR_GAP, alignSelf: 'flex-end', marginBottom: 2 }}>
             {isLastInGroup ? (
-              <MsgAvatar
-                uri={msg.senderAvatar}
-                name={msg.senderName || userName}
-                size={AVATAR_SIZE}
-                colors={colors}
-              />
+              <MsgAvatar uri={msg.senderAvatar} name={msg.senderName || userName} size={AVATAR_SIZE} colors={colors} />
             ) : (
               <View style={{ width: AVATAR_SIZE }} />
             )}
           </View>
         )}
 
-        {/*bubble content*/}
         <View style={{ maxWidth: '72%', alignItems: mine ? 'flex-end' : 'flex-start' }}>
-
           {!mine && isFirstInGroup && (
             <Text style={[s.senderName, { color: colors.saffron }]}>
               {msg.senderName || userName}
@@ -442,8 +385,6 @@ export default function ChatScreen({ navigation, route }: any) {
                 </View>
               </View>
             </TouchableOpacity>
-          ) : msg.type === 'document' ? (
-            <DocumentBubble msg={msg} mine={mine} colors={colors} />
           ) : (
             <View style={[
               s.textBubble,
@@ -464,16 +405,10 @@ export default function ChatScreen({ navigation, route }: any) {
           </View>
         </View>
 
-        {/* my avatar (right side) */}
         {mine && (
           <View style={{ width: AVATAR_SIZE, marginLeft: AVATAR_GAP, alignSelf: 'flex-end', marginBottom: 2 }}>
             {isLastInGroup ? (
-              <MsgAvatar
-                uri={userProfile?.avatarUrl}
-                name={userProfile?.name || 'Me'}
-                size={AVATAR_SIZE}
-                colors={colors}
-              />
+              <MsgAvatar uri={userProfile?.avatarUrl} name={userProfile?.name || 'Me'} size={AVATAR_SIZE} colors={colors} />
             ) : (
               <View style={{ width: AVATAR_SIZE }} />
             )}
@@ -483,7 +418,6 @@ export default function ChatScreen({ navigation, route }: any) {
     );
   };
 
-  //message list
   const MessageList = () => (
     <FlatList
       ref={flatRef}
@@ -517,32 +451,41 @@ export default function ChatScreen({ navigation, route }: any) {
   return (
     <View style={[s.container, { backgroundColor: colors.bg }]}>
 
-      {/*Header*/}
+      {/* header */}
       <View style={[s.header, { backgroundColor: colors.header, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.headerIconBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.darkText} />
         </TouchableOpacity>
+
         <TouchableOpacity style={s.headerUser} onPress={() => navigation.navigate('UserProfile', { userId: otherUserId })}>
           <View style={{ position: 'relative' }}>
             <MsgAvatar uri={userAvatar} name={userName} size={40} colors={colors} />
             {otherStatus.online && <View style={[s.onlineDot, { borderColor: colors.header }]} />}
           </View>
-          <View>
-            <Text style={[s.headerName, { color: colors.darkText }]}>{userName || 'User'}</Text>
-            <Text style={[s.headerSub, { color: otherStatus.online ? '#27AE60' : colors.muted }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[s.headerName, { color: colors.darkText }]} numberOfLines={1}>{userName || 'User'}</Text>
+            <Text style={[s.headerSub, { color: otherStatus.online ? '#27AE60' : colors.muted }]} numberOfLines={1}>
               {isOtherTyping ? 'typing...' : otherStatus.online ? 'Online' : fmtLastSeen(otherStatus.lastSeen)}
             </Text>
           </View>
         </TouchableOpacity>
-        <TouchableOpacity onPress={clearChat}>
-          <Text style={[s.clearBtn, { color: colors.muted }]}>Clear</Text>
-        </TouchableOpacity>
+
+        <View style={s.headerActions}>
+          <TouchableOpacity style={s.headerIconBtn} onPress={handleVoiceCall} activeOpacity={0.7}>
+            <Ionicons name="call-outline" size={22} color={colors.saffron} />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.headerIconBtn} onPress={handleVideoCall} activeOpacity={0.7}>
+            <Ionicons name="videocam-outline" size={24} color={colors.saffron} />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.headerIconBtn} onPress={() => setShowHeaderMenu(true)} activeOpacity={0.7}>
+            <Ionicons name="ellipsis-vertical" size={20} color={colors.darkText} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
 
-        {/*messages area */}
         {isCustom ? (
           <ImageBackground source={{ uri: customBgUri! }} style={s.msgArea} resizeMode="cover">
             <MessageList />
@@ -555,7 +498,6 @@ export default function ChatScreen({ navigation, route }: any) {
           </View>
         )}
 
-        {/*edit bar*/}
         {editingMsg && (
           <View style={[s.editBar, { backgroundColor: colors.warmBg, borderTopColor: colors.border }]}>
             <Ionicons name="create-outline" size={16} color={colors.saffron} />
@@ -566,7 +508,6 @@ export default function ChatScreen({ navigation, route }: any) {
           </View>
         )}
 
-        {/*input bar*/}
         <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
           <TouchableOpacity style={s.attachBtn} onPress={() => setShowAttach(true)}>
             {uploadingMedia
@@ -591,17 +532,35 @@ export default function ChatScreen({ navigation, route }: any) {
         </View>
       </KeyboardAvoidingView>
 
-      {/* attach menu */}
+      {/* header menu */}
+      <Modal visible={showHeaderMenu} transparent animationType="fade" onRequestClose={() => setShowHeaderMenu(false)}>
+        <Pressable style={s.headerMenuOverlay} onPress={() => setShowHeaderMenu(false)}>
+          <View style={[s.headerMenuSheet, { backgroundColor: colors.card }]}>
+            <TouchableOpacity
+              style={[s.headerMenuItem, { borderBottomColor: colors.border }]}
+              onPress={() => { setShowHeaderMenu(false); navigation.navigate('UserProfile', { userId: otherUserId }); }}>
+              <Ionicons name="person-outline" size={20} color={colors.darkText} />
+              <Text style={[s.headerMenuTxt, { color: colors.darkText }]}>View Profile</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.headerMenuItem, { borderBottomColor: 'transparent' }]}
+              onPress={clearChat}>
+              <Ionicons name="trash-outline" size={20} color="#FF4444" />
+              <Text style={[s.headerMenuTxt, { color: '#FF4444' }]}>Clear Chat</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
       <Modal visible={showAttach} transparent animationType="slide">
         <Pressable style={s.attachOverlay} onPress={() => setShowAttach(false)}>
           <View style={[s.attachSheet, { backgroundColor: colors.card }]}>
-            <Text style={[s.attachTitle, { color: colors.darkText }]}>Send</Text>
+            <Text style={[s.attachTitle, { color: colors.darkText }]}>Send Photo</Text>
             {[
               { icon: 'image-outline', label: 'Photo from Gallery', color: '#E8F0FE', iconColor: '#1A4D8B', onPress: () => sendImage(false) },
               { icon: 'camera-outline', label: 'Take Photo', color: '#E8F5F3', iconColor: '#1A6B5C', onPress: () => sendImage(true) },
-              { icon: 'document-outline', label: 'Document', color: '#FFF3E0', iconColor: '#D4651A', onPress: sendDocument },
             ].map((item, i) => (
-              <TouchableOpacity key={i} style={[s.attachItem, { borderBottomColor: i < 2 ? colors.border : 'transparent' }]} onPress={item.onPress}>
+              <TouchableOpacity key={i} style={[s.attachItem, { borderBottomColor: i === 0 ? colors.border : 'transparent' }]} onPress={item.onPress}>
                 <View style={[s.attachIcon, { backgroundColor: item.color }]}>
                   <Ionicons name={item.icon as any} size={22} color={item.iconColor} />
                 </View>
@@ -612,13 +571,13 @@ export default function ChatScreen({ navigation, route }: any) {
         </Pressable>
       </Modal>
 
-      {/* ── Message options ── */}
+      {/* message options */}
       <Modal visible={selectedMsg !== null} transparent animationType="fade">
         <Pressable style={s.optOverlay} onPress={() => setSelectedMsg(null)}>
           <View style={[s.optSheet, { backgroundColor: colors.card }]}>
             <View style={[s.optPreview, { borderBottomColor: colors.border }]}>
               <Text style={[s.optPreviewTxt, { color: colors.muted }]} numberOfLines={2}>
-                {selectedMsg?.type === 'image' ? '📷 Photo' : selectedMsg?.type === 'document' ? `📄 ${selectedMsg.documentName}` : selectedMsg?.text}
+                {selectedMsg?.type === 'image' ? '📷 Photo' : selectedMsg?.text}
               </Text>
             </View>
             {selectedMsg?.type === 'text' && isMe(selectedMsg) && (
@@ -650,7 +609,6 @@ export default function ChatScreen({ navigation, route }: any) {
         </Pressable>
       </Modal>
 
-      {/*image full-screen viewer*/}
       <ImageViewer uri={viewerUri || ''} visible={viewerUri !== null} onClose={() => setViewerUri(null)} />
     </View>
   );
@@ -658,60 +616,66 @@ export default function ChatScreen({ navigation, route }: any) {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingTop: 52, paddingBottom: 12, borderBottomWidth: 0.5 },
-  headerUser: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  header: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 6, paddingTop: 52, paddingBottom: 12,
+    borderBottomWidth: 0.5, gap: 4,
+  },
+  headerIconBtn: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center' },
+  headerUser: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 4 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 0 },
   onlineDot: { position: 'absolute', bottom: 0, right: 0, width: 11, height: 11, borderRadius: 6, backgroundColor: '#27AE60', borderWidth: 2 },
   headerName: { fontSize: 15, fontWeight: '700' },
   headerSub: { fontSize: 12, marginTop: 1 },
-  clearBtn: { fontSize: 13, fontWeight: '600', paddingHorizontal: 4 },
+
+  headerMenuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.25)' },
+  headerMenuSheet: {
+    position: 'absolute', top: 96, right: 12,
+    minWidth: 200, borderRadius: 14, paddingVertical: 6,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15, shadowRadius: 12, elevation: 8,
+  },
+  headerMenuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 0.5 },
+  headerMenuTxt: { fontSize: 14, fontWeight: '500' },
+
   msgArea: { flex: 1 },
   dateHeader: { alignItems: 'center', marginVertical: 10 },
   datePill: { borderRadius: 12, paddingHorizontal: 14, paddingVertical: 4 },
   dateTxt: { fontSize: 12 },
 
-  //message row 
   row: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 3 },
   rowRight: { justifyContent: 'flex-end' },
   rowLeft: { justifyContent: 'flex-start' },
 
-  // sender name above bubble
   senderName: { fontSize: 11, fontWeight: '600', marginBottom: 3, marginLeft: 4 },
-
-  // text bubble
   textBubble: { borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
   bubbleTxt: { fontSize: 15, lineHeight: 21 },
   editedTxt: { fontSize: 10, marginTop: 2 },
 
-  // image bubble
   imgBubble: { borderRadius: 18, overflow: 'hidden', position: 'relative' },
   chatImg: { width: 210, height: 210 },
   imgOverlay: { position: 'absolute', bottom: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 12, padding: 4 },
 
-  // time + read receipt
   meta: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3, paddingHorizontal: 4 },
   metaTime: { fontSize: 10 },
 
   emptyChat: { alignItems: 'center', paddingTop: 60, gap: 12 },
   emptyChatTxt: { fontSize: 15 },
 
-  // typing
   typingBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8 },
   typingBubble: { borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1 },
   dots: { flexDirection: 'row', gap: 4 },
   dot: { width: 6, height: 6, borderRadius: 3, opacity: 0.6 },
   typingTxt: { fontSize: 12 },
 
-  // edit bar
   editBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8, borderTopWidth: 0.5 },
   editBarTxt: { flex: 1, fontSize: 13 },
 
-  // input bar
   inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 0.5 },
   attachBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
   input: { flex: 1, borderRadius: 22, paddingHorizontal: 14, paddingVertical: 9, fontSize: 15, maxHeight: 100 },
   sendBtn: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center' },
 
-  // attach sheet
   attachOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
   attachSheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 34 },
   attachTitle: { fontSize: 15, fontWeight: '700', padding: 20, paddingBottom: 12 },
@@ -719,7 +683,6 @@ const s = StyleSheet.create({
   attachIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   attachLabel: { fontSize: 15, fontWeight: '500' },
 
-  // options sheet
   optOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
   optSheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 30 },
   optPreview: { padding: 16, borderBottomWidth: 0.5 },

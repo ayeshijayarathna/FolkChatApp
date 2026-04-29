@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  FlatList, Image, RefreshControl, ActivityIndicator,
+  FlatList, Image, RefreshControl, ActivityIndicator, Alert,
 } from 'react-native';
-import Ionicons from '@react-native-vector-icons/ionicons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import firestore from '@react-native-firebase/firestore';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuthStore } from '../../store/authStore';
@@ -18,19 +18,32 @@ interface Notification {
   postImage?: string;
   postId?: string;
   chatId?: string;
+  callId?: string;
   read: boolean;
   createdAt: any;
 }
 
 const TYPE_ICON: Record<string, { name: string; color: string }> = {
-  like:           { name: 'heart',              color: '#FF4444' },
-  comment:        { name: 'chatbubble',          color: '#4A90E2' },
-  reply:          { name: 'return-down-forward', color: '#7B61FF' },
-  follow:         { name: 'person-add',          color: '#27AE60' },
-  view_milestone: { name: 'trending-up',         color: '#E07830' },
-  message:        { name: 'chatbubble-ellipses', color: '#D4651A' },
-  interested:     { name: 'star',                color: '#B8860B' },
+  like:                 { name: 'heart',                color: '#FF4444' },
+  comment:              { name: 'chatbubble',           color: '#4A90E2' },
+  reply:                { name: 'return-down-forward',  color: '#7B61FF' },
+  follow:               { name: 'person-add',           color: '#27AE60' },
+  view_milestone:       { name: 'trending-up',          color: '#E07830' },
+  message:              { name: 'chatbubble-ellipses',  color: '#D4651A' },
+  interested:           { name: 'star',                 color: '#B8860B' },
+  incoming_voice_call:  { name: 'call',                 color: '#27AE60' },
+  incoming_video_call:  { name: 'videocam',             color: '#27AE60' },
+  missed_voice_call:    { name: 'call',                 color: '#E74C3C' },
+  missed_video_call:    { name: 'videocam',             color: '#E74C3C' },
+  voice_call_ended:     { name: 'call',                 color: '#7A6A5A' },
+  video_call_ended:     { name: 'videocam',             color: '#7A6A5A' },
 };
+
+const CALL_TYPES = [
+  'incoming_voice_call', 'incoming_video_call',
+  'missed_voice_call',   'missed_video_call',
+  'voice_call_ended',    'video_call_ended',
+];
 
 function timeAgo(timestamp: any): string {
   if (!timestamp) return '';
@@ -42,6 +55,8 @@ function timeAgo(timestamp: any): string {
   if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}d ago`;
   return date.toLocaleDateString();
 }
+
+function getChatId(a: string, b: string) { return [a, b].sort().join('_'); }
 
 export default function NotificationsScreen({ navigation }: any) {
   const { colors } = useTheme();
@@ -86,12 +101,44 @@ export default function NotificationsScreen({ navigation }: any) {
     } catch { }
   };
 
+  const callBack = (notif: Notification) => {
+    const screen = (notif.type === 'missed_video_call' || notif.type === 'incoming_video_call')
+      ? 'VideoCall' : 'VoiceCall';
+    navigation.navigate(screen, {
+      userId: notif.fromUserId,
+      userName: notif.fromUserName,
+      userAvatar: notif.fromUserAvatar,
+      chatId: getChatId(user?.uid || '', notif.fromUserId),
+      isIncoming: false,
+    });
+  };
+
   const handleNotifPress = async (notif: Notification) => {
     if (!notif.read) {
       setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
       try {
         await firestore().collection('notifications').doc(notif.id).update({ read: true });
       } catch { }
+    }
+
+    if (CALL_TYPES.includes(notif.type)) {
+      if (notif.type === 'missed_voice_call' || notif.type === 'missed_video_call') {
+        Alert.alert(
+          'Call back',
+          `Call ${notif.fromUserName} back?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Call', onPress: () => callBack(notif) },
+          ],
+        );
+        return;
+      }
+      navigation.navigate('Chat', {
+        userId: notif.fromUserId,
+        userName: notif.fromUserName,
+        userAvatar: notif.fromUserAvatar,
+      });
+      return;
     }
 
     switch (notif.type) {
@@ -121,6 +168,8 @@ export default function NotificationsScreen({ navigation }: any) {
 
   const renderItem = ({ item }: { item: Notification }) => {
     const icon = TYPE_ICON[item.type] || { name: 'notifications-outline', color: '#999' };
+    const isMissedCall = item.type === 'missed_voice_call' || item.type === 'missed_video_call';
+
     return (
       <TouchableOpacity
         style={[
@@ -150,15 +199,33 @@ export default function NotificationsScreen({ navigation }: any) {
             <Text style={{ fontWeight: '700' }}>{item.fromUserName} </Text>
             {item.message.replace(item.fromUserName + ' ', '')}
           </Text>
-          <Text style={[styles.notifTime, { color: colors.muted }]}>{timeAgo(item.createdAt)}</Text>
+          <Text style={[
+            styles.notifTime,
+            isMissedCall
+              ? { color: '#E74C3C', fontWeight: '600' }
+              : { color: colors.muted },
+          ]}>
+            {timeAgo(item.createdAt)}
+            {isMissedCall && ' · Tap to call back'}
+          </Text>
         </View>
 
-        {/* Post thumbnail */}
-        {item.postImage ? (
+        {isMissedCall ? (
+          <TouchableOpacity
+            style={[styles.callBackBtn, { backgroundColor: '#27AE60' }]}
+            onPress={() => callBack(item)}
+            activeOpacity={0.8}>
+            <Ionicons
+              name={item.type === 'missed_video_call' ? 'videocam' : 'call'}
+              size={18}
+              color="#fff"
+            />
+          </TouchableOpacity>
+        ) : item.postImage ? (
           <Image source={{ uri: item.postImage }} style={styles.postThumb} />
         ) : null}
 
-        {/* Unread dot */}
+        {/* unread dot */}
         {!item.read && (
           <View style={[styles.unreadDot, { backgroundColor: colors.saffron }]} />
         )}
@@ -254,6 +321,12 @@ const styles = StyleSheet.create({
   notifMessage: { fontSize: 14, lineHeight: 20 },
   notifTime: { fontSize: 12, marginTop: 3 },
   postThumb: { width: 44, height: 44, borderRadius: 8 },
+  callBackBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#27AE60', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
+  },
   unreadDot: {
     position: 'absolute', top: '50%', right: 10,
     width: 8, height: 8, borderRadius: 4, marginTop: -4,

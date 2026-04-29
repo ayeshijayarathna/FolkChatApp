@@ -7,3 +7,6 @@ export const GOOGLE_WEB_CLIENT_ID = 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.c
 
 // Groq AI 
 export const GROQ_API_KEY = 'gsk_YOUR_GROQ_KEY_HERE';
+
+//agora
+export const AGORA_APP_ID = 'your_32_char_app_id_here';

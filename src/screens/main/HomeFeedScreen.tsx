@@ -3,11 +3,13 @@ import {
   View, Text, StyleSheet, TouchableOpacity,
   Modal, Pressable, Image, FlatList,
   RefreshControl, Dimensions, TextInput,
-  KeyboardAvoidingView, Platform, ScrollView, Share,
+  KeyboardAvoidingView, Platform, ScrollView, Alert,
 } from 'react-native';
-import Ionicons from '@react-native-vector-icons/ionicons';
+import LinearGradient from 'react-native-linear-gradient';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import firestore from '@react-native-firebase/firestore';
 import Video from 'react-native-video';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 import { useLang } from '../../context/LanguageContext';
 import { useAuthStore } from '../../store/authStore';
@@ -16,6 +18,9 @@ const { width, height: SH } = Dimensions.get('window');
 const CAPTION_LIMIT = 120;
 const CARD_WIDTH = width - 24;
 const GAP = 2;
+
+const STORY_RING_COLORS = ['#D4651A', '#C4834A', '#B8860B', '#1A6B5C', '#2D5016'];
+const getStoryRingColor = (index: number) => STORY_RING_COLORS[index % STORY_RING_COLORS.length];
 
 interface Post {
   id: string; userId: string; imageUrl: string;
@@ -36,13 +41,398 @@ interface Event {
   interestedUsers: string[]; createdAt: any;
   userName?: string; userAvatar?: string;
 }
+interface Story {
+  id: string; userId: string; userName: string; userAvatar: string;
+  mediaUrl: string; mediaType: 'image' | 'video'; createdAt: any;
+  viewedBy: string[];
+  caption?: string; captionColor?: string;
+  captionXFrac?: number | null; captionYFrac?: number | null;
+}
 
 const isVideoUrl = (url: string) =>
   url?.includes('/video/upload/') || url?.endsWith('.mp4') || url?.endsWith('.mov');
 
 function initials(name: string) { return (name || 'A').charAt(0).toUpperCase(); }
 
-//full-screen media viewer 
+//story viewer model
+function StoryViewer({
+  stories, initialIndex, visible, onClose, currentUserId, colors, onDeleteStory,
+}: {
+  stories: { userId: string; userName: string; userAvatar: string; items: Story[] }[];
+  initialIndex: number; visible: boolean; onClose: () => void;
+  currentUserId?: string; colors: any;
+  onDeleteStory: (storyId: string) => Promise<void>;
+}) {
+  const [userIdx, setUserIdx] = useState(initialIndex);
+  const [storyIdx, setStoryIdx] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const DURATION = 5000;
+
+  const currentUser = stories[userIdx];
+  const currentStory = currentUser?.items[storyIdx];
+
+  const markViewed = async (story: Story) => {
+    if (!currentUserId || story.viewedBy?.includes(currentUserId)) return;
+    try {
+      await firestore().collection('stories').doc(story.id).update({
+        viewedBy: firestore.FieldValue.arrayUnion(currentUserId),
+      });
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (!visible) return;
+    setUserIdx(initialIndex);
+    setStoryIdx(0);
+    setProgress(0);
+  }, [visible, initialIndex]);
+
+  useEffect(() => {
+    if (!visible || !currentStory) return;
+    markViewed(currentStory);
+    if (timerRef.current) clearInterval(timerRef.current);
+    setProgress(0);
+    const startTime = Date.now();
+    timerRef.current = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const pct = Math.min(elapsed / DURATION, 1);
+      setProgress(pct);
+      if (pct >= 1) {
+        if (timerRef.current) clearInterval(timerRef.current);
+        goNext();
+      }
+    }, 50);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [userIdx, storyIdx, visible]);
+
+  const goNext = () => {
+    const user = stories[userIdx];
+    if (!user) return;
+    if (storyIdx < user.items.length - 1) {
+      setStoryIdx(s => s + 1);
+    } else if (userIdx < stories.length - 1) {
+      setUserIdx(u => u + 1);
+      setStoryIdx(0);
+    } else {
+      onClose();
+    }
+  };
+
+  const goPrev = () => {
+    if (storyIdx > 0) {
+      setStoryIdx(s => s - 1);
+    } else if (userIdx > 0) {
+      setUserIdx(u => u - 1);
+      setStoryIdx(0);
+    }
+  };
+
+  const handleDelete = () => {
+    if (!currentStory) return;
+    Alert.alert(
+      'Delete Story',
+      'This story will be permanently deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive',
+          onPress: async () => {
+            await onDeleteStory(currentStory.id);
+            const user = stories[userIdx];
+            if (user && user.items.length > 1) {
+              goNext();
+            } else {
+              onClose();
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  if (!visible || !currentStory) return null;
+
+  const isOwnStory = currentStory.userId === currentUserId;
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
+      <View style={sv.container}>
+        {/* Progress bars */}
+        <View style={sv.progressRow}>
+          {currentUser.items.map((_, i) => (
+            <View key={i} style={[sv.progressTrack, { flex: 1 }]}>
+              <View style={[sv.progressFill, {
+                width: i < storyIdx ? '100%' : i === storyIdx ? `${progress * 100}%` : '0%',
+                backgroundColor: '#fff',
+              }]} />
+            </View>
+          ))}
+        </View>
+
+        {/* Header */}
+        <View style={sv.header}>
+          {currentUser.userAvatar
+            ? <Image source={{ uri: currentUser.userAvatar }} style={sv.avatar} />
+            : <View style={[sv.avatarInit, { backgroundColor: colors.saffron }]}>
+                <Text style={sv.avatarInitTxt}>{initials(currentUser.userName)}</Text>
+              </View>
+          }
+          <Text style={sv.userName}>{currentUser.userName}</Text>
+
+          {isOwnStory && (
+            <TouchableOpacity onPress={handleDelete} style={[sv.closeBtn, { marginRight: 4 }]}>
+              <Ionicons name="trash-outline" size={22} color="#FF6B6B" />
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity onPress={onClose} style={sv.closeBtn}>
+            <Ionicons name="close" size={26} color="#fff" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Media */}
+        {currentStory.mediaType === 'video'
+          ? <Video
+              source={{ uri: currentStory.mediaUrl }}
+              style={sv.media}
+              resizeMode="contain"
+              repeat={false}
+              paused={false}
+              ignoreSilentSwitch="ignore"
+            />
+          : <Image source={{ uri: currentStory.mediaUrl }} style={sv.media} resizeMode="contain" />
+        }
+
+        {currentStory.caption ? (() => {
+          const sw = width;           
+          const sh = SH;              
+          const xFrac = currentStory.captionXFrac ?? 0.5;
+          const yFrac = currentStory.captionYFrac ?? 0.45;
+          // Turn fractions back into whole pixels
+          const left = xFrac * sw;
+          const top  = yFrac * sh;
+          return (
+            <View
+              pointerEvents="none"
+              style={[sv.captionWrap, { left: left - sw / 2, top }]}
+            >
+              <Text style={[sv.captionTxt, { color: currentStory.captionColor || '#fff' }]}>
+                {currentStory.caption}
+              </Text>
+            </View>
+          );
+        })() : null}
+
+        <View style={sv.touchZones}>
+          <TouchableOpacity style={{ flex: 1 }} onPress={goPrev} activeOpacity={1} />
+          <TouchableOpacity style={{ flex: 1 }} onPress={goNext} activeOpacity={1} />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const sv = StyleSheet.create({
+  container:    { flex: 1, backgroundColor: '#000' },
+  progressRow:  { flexDirection: 'row', gap: 3, paddingHorizontal: 10, paddingTop: 52, zIndex: 10 },
+  progressTrack:{ height: 2.5, backgroundColor: 'rgba(255,255,255,0.35)', borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 2 },
+  header:       { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingTop: 10, paddingBottom: 6, gap: 10, zIndex: 10 },
+  avatar:       { width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: '#fff' },
+  avatarInit:   { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+  avatarInitTxt:{ color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  userName:     { color: '#fff', fontWeight: '700', fontSize: 14, flex: 1 },
+  closeBtn:     { padding: 4 },
+  media:        { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  touchZones:   { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row' },
+  captionWrap:  { position: 'absolute', width, alignItems: 'center' },
+  captionTxt:   { fontSize: 18, fontWeight: '800', textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 },
+});
+
+//story bar
+function StoriesBar({
+  currentUserId, userProfile, colors, navigation,
+}: {
+  currentUserId?: string; userProfile: any; colors: any; navigation: any;
+}) {
+  const [stories, setStories] = useState<{ userId: string; userName: string; userAvatar: string; items: Story[]; hasUnviewed: boolean }[]>([]);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchStories();
+    }, [currentUserId])
+  );
+
+  const fetchStories = async () => {
+    if (!currentUserId) return;
+    try {
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const snap = await firestore().collection('stories')
+        .where('createdAt', '>=', cutoff)
+        .orderBy('createdAt', 'desc')
+        .limit(50)
+        .get();
+
+      const allStories = snap.docs.map(d => ({ id: d.id, ...d.data() } as Story));
+
+      const userDoc = await firestore().collection('users').doc(currentUserId).get();
+      const following: string[] = userDoc.data()?.following || [];
+      const relevantIds = [currentUserId, ...following];
+
+      const grouped: Record<string, Story[]> = {};
+      for (const s of allStories) {
+        if (!relevantIds.includes(s.userId)) continue;
+        if (!grouped[s.userId]) grouped[s.userId] = [];
+        grouped[s.userId].push(s);
+      }
+
+      const result = await Promise.all(
+        Object.entries(grouped).map(async ([uid, items]) => {
+          try {
+            const u = await firestore().collection('users').doc(uid).get();
+            const ud = u.data();
+            const hasUnviewed = items.some(s => !(s.viewedBy || []).includes(currentUserId));
+            return {
+              userId: uid,
+              userName: ud?.name || 'Artist',
+              userAvatar: ud?.avatarUrl || '',
+              items: items.sort((a, b) => a.createdAt?.toMillis?.() - b.createdAt?.toMillis?.()),
+              hasUnviewed,
+            };
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      const filtered = result.filter(Boolean) as typeof stories;
+
+      const myStory = filtered.find(s => s.userId === currentUserId);
+      const others = filtered.filter(s => s.userId !== currentUserId);
+      const unviewed = others.filter(s => s.hasUnviewed);
+      const viewed = others.filter(s => !s.hasUnviewed);
+
+      setStories([...(myStory ? [myStory] : []), ...unviewed, ...viewed]);
+    } catch (e) {
+      console.log('Stories fetch error:', e);
+    }
+  };
+
+  const handleDeleteStory = async (storyId: string) => {
+    try {
+      await firestore().collection('stories').doc(storyId).delete();
+      fetchStories();
+    } catch (e) {
+      Alert.alert('Error', 'Could not delete story.');
+    }
+  };
+
+  const openStory = (index: number) => {
+    setViewerIndex(index);
+    setViewerVisible(true);
+  };
+
+  const myStoryEntry = stories.find(s => s.userId === currentUserId);
+
+  return (
+    <>
+      <View style={[stb.container, { borderBottomColor: colors.border }]}>
+        <FlatList
+          data={stories}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={s => s.userId}
+          contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 10, gap: 14 }}
+          ListHeaderComponent={
+            !myStoryEntry ? (
+              <TouchableOpacity
+                style={stb.storyWrap}
+                onPress={() => navigation.navigate('AddStory')}
+                activeOpacity={0.85}
+              >
+                <View style={[stb.addRing, { borderColor: colors.border }]}>
+                  {userProfile?.avatarUrl
+                    ? <Image source={{ uri: userProfile.avatarUrl }} style={stb.avatar} />
+                    : <View style={[stb.avatarInit, { backgroundColor: colors.saffron }]}>
+                        <Text style={stb.avatarInitTxt}>{initials(userProfile?.name || '')}</Text>
+                      </View>
+                  }
+                  <View style={[stb.addBadge, { backgroundColor: colors.saffron }]}>
+                    <Ionicons name="add" size={12} color="#fff" />
+                  </View>
+                </View>
+                <Text style={[stb.storyName, { color: colors.muted }]} numberOfLines={1}>Your Story</Text>
+              </TouchableOpacity>
+            ) : null
+          }
+          renderItem={({ item, index }) => {
+            const isMe = item.userId === currentUserId;
+            return (
+              <TouchableOpacity style={stb.storyWrap} onPress={() => openStory(index)} activeOpacity={0.85}>
+                <LinearGradient
+                  colors={item.hasUnviewed
+                    ? [getStoryRingColor(index), getStoryRingColor((index + 1) % STORY_RING_COLORS.length)]
+                    : [colors.border, colors.border]}
+                  style={stb.ring}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <View style={[stb.ringInner, { backgroundColor: colors.warmBg }]}>
+                    {item.userAvatar
+                      ? <Image source={{ uri: item.userAvatar }} style={stb.avatar} />
+                      : <View style={[stb.avatarInit, { backgroundColor: colors.saffron }]}>
+                          <Text style={stb.avatarInitTxt}>{initials(item.userName)}</Text>
+                        </View>
+                    }
+                  </View>
+                </LinearGradient>
+                {isMe && (
+                  <TouchableOpacity
+                    style={[stb.addBadge, { backgroundColor: colors.saffron, position: 'absolute', bottom: 18, right: 0 }]}
+                    onPress={() => navigation.navigate('AddStory')}
+                  >
+                    <Ionicons name="add" size={12} color="#fff" />
+                  </TouchableOpacity>
+                )}
+                <Text style={[stb.storyName, { color: colors.muted }]} numberOfLines={1}>
+                  {isMe ? 'Your Story' : item.userName.split(' ')[0]}
+                </Text>
+              </TouchableOpacity>
+            );
+          }}
+        />
+      </View>
+
+      <StoryViewer
+        stories={stories}
+        initialIndex={viewerIndex}
+        visible={viewerVisible}
+        onClose={() => { setViewerVisible(false); fetchStories(); }}
+        currentUserId={currentUserId}
+        colors={colors}
+        onDeleteStory={handleDeleteStory}
+      />
+    </>
+  );
+}
+
+const stb = StyleSheet.create({
+  container:    { borderBottomWidth: 0.5 },
+  storyWrap:    { alignItems: 'center', width: 68 },
+  ring:         { width: 68, height: 68, borderRadius: 34, padding: 2.5, marginBottom: 5 },
+  ringInner:    { flex: 1, borderRadius: 30, overflow: 'hidden', padding: 2 },
+  addRing:      { width: 68, height: 68, borderRadius: 34, borderWidth: 2, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', marginBottom: 5, position: 'relative' },
+  avatar:       { width: '100%', height: '100%', borderRadius: 28 },
+  avatarInit:   { flex: 1, borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
+  avatarInitTxt:{ color: '#fff', fontWeight: 'bold', fontSize: 18 },
+  addBadge:     { width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
+  storyName:    { fontSize: 11, fontWeight: '500', textAlign: 'center', maxWidth: 64 },
+});
+
+//meadia viewer
 function MediaViewer({ items, initialIndex, visible, onClose }: {
   items: { url: string; type: 'image' | 'video' }[];
   initialIndex: number; visible: boolean; onClose: () => void;
@@ -54,21 +444,15 @@ function MediaViewer({ items, initialIndex, visible, onClose }: {
   useEffect(() => {
     if (visible) {
       setActiveIndex(initialIndex);
-      // auto-play active video when viewer opens
       const initPaused: Record<number, boolean> = {};
-      items.forEach((item, i) => {
-        initPaused[i] = i !== initialIndex;
-      });
+      items.forEach((_, i) => { initPaused[i] = i !== initialIndex; });
       setVideoPaused(initPaused);
     }
   }, [visible, initialIndex]);
 
   useEffect(() => {
-    // pause all others when active index changes
     const newPaused: Record<number, boolean> = {};
-    items.forEach((item, i) => {
-      newPaused[i] = i !== activeIndex;
-    });
+    items.forEach((_, i) => { newPaused[i] = i !== activeIndex; });
     setVideoPaused(newPaused);
   }, [activeIndex]);
 
@@ -109,10 +493,8 @@ function MediaViewer({ items, initialIndex, visible, onClose }: {
                     controls
                     paused={videoPaused[index] ?? true}
                     repeat={false}
-                    onError={(e) => console.log('Video error:', e)}
                     ignoreSilentSwitch="ignore"
                   />
-                  {/* big play button overlay when paused */}
                   {videoPaused[index] && (
                     <View style={vw.playOverlay} pointerEvents="none">
                       <View style={vw.playBtn}>
@@ -145,7 +527,7 @@ const vw = StyleSheet.create({
   playBtn:     { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
 });
 
-// Grid
+//meadia grid
 function MediaGrid({ items, onPressItem }: {
   items: { url: string; type: 'image' | 'video' }[];
   onPressItem: (index: number) => void;
@@ -178,10 +560,7 @@ function MediaGrid({ items, onPressItem }: {
     </TouchableOpacity>
   );
 
-  // 1 item
   if (count === 1) return <View style={gs.grid}>{renderItem(items[0], CARD_WIDTH, fullH, 0)}</View>;
-
-  // 2 items(side by side)
   if (count === 2) {
     return (
       <View style={[gs.grid, { flexDirection: 'row', gap: GAP }]}>
@@ -190,8 +569,6 @@ function MediaGrid({ items, onPressItem }: {
       </View>
     );
   }
-
-  // 3 items (1 big left, 2 stacked right)
   if (count === 3) {
     const rightH = (fullH - GAP) / 2;
     return (
@@ -204,8 +581,6 @@ function MediaGrid({ items, onPressItem }: {
       </View>
     );
   }
-
-  // 4 items (1 big left, 3 stacked right)
   if (count === 4) {
     const rightH = (fullH - GAP * 2) / 3;
     return (
@@ -219,8 +594,6 @@ function MediaGrid({ items, onPressItem }: {
       </View>
     );
   }
-
-  // 5+ items (1 big left, 2 top right + 2 bottom-right with +n overlay)
   const rightH = (fullH - GAP) / 2;
   const rightW = halfW;
   const extra = count - 5;
@@ -248,36 +621,29 @@ const gs = StyleSheet.create({
   overlayMoreTxt: { color: '#fff', fontSize: 28, fontWeight: '800' },
 });
 
+//post details
 function PostDetails({ title, userName, caption, techniques, colors }: {
   title: string; userName: string; caption: string; techniques?: string; colors: any;
 }) {
   const [expanded, setExpanded] = useState(false);
   const hasMore = !!(caption || techniques);
-
   return (
     <View>
-      {/* title line */}
       {title ? (
         <View style={styles.titleRow}>
           <Text style={[styles.titleUser, { color: colors.darkText }]}>{userName} </Text>
           <Text style={[styles.titleText, { color: colors.darkText }]}>{title}</Text>
         </View>
       ) : null}
-
-      {/* Show more button */}
       {hasMore && !expanded && (
         <TouchableOpacity onPress={() => setExpanded(true)} style={styles.showMoreBtn}>
           <Text style={[styles.showMoreTxt, { color: colors.saffron }]}>Show more</Text>
           <Ionicons name="chevron-down" size={14} color={colors.saffron} />
         </TouchableOpacity>
       )}
-
-      {/* Expanded content */}
       {expanded && (
         <View style={styles.expandedWrap}>
-          {caption ? (
-            <Text style={[styles.descTxt, { color: colors.muted }]}>{caption}</Text>
-          ) : null}
+          {caption ? <Text style={[styles.descTxt, { color: colors.muted }]}>{caption}</Text> : null}
           {techniques ? (
             <View style={styles.techRow}>
               <View style={[styles.techBadge, { backgroundColor: `${colors.saffron}18` }]}>
@@ -297,7 +663,7 @@ function PostDetails({ title, userName, caption, techniques, colors }: {
   );
 }
 
-// events bar
+//events bar
 const CATEGORY_META: Record<string, { icon: string; grad: [string, string] }> = {
   'Exhibition':  { icon: 'color-palette-outline', grad: ['#D4651A', '#8B3A1A'] },
   'Workshop':    { icon: 'construct-outline',     grad: ['#1A6B5C', '#2D5016'] },
@@ -321,7 +687,7 @@ function EventsBar({ navigation, colors, currentUserId }: { navigation: any; col
             return { ...e, userName: u.data()?.name || 'Artist', userAvatar: u.data()?.avatarUrl || '' };
           } catch { return e; }
         })).then(setEvents);
-      }).catch(() => { });
+      }).catch(() => {});
   }, []);
   if (events.length === 0) return null;
   const parseDate = (ts: any) => {
@@ -332,7 +698,6 @@ function EventsBar({ navigation, colors, currentUserId }: { navigation: any; col
       month: d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
     };
   };
-
   return (
     <View style={[styles.eventsSection, { borderBottomColor: colors.border }]}>
       <View style={styles.eventsSectionHeader}>
@@ -360,13 +725,12 @@ function EventsBar({ navigation, colors, currentUserId }: { navigation: any; col
             <TouchableOpacity style={styles.eventCard}
               onPress={() => navigation.navigate('EventDetail', { event: item })} activeOpacity={0.88}>
               <View style={[styles.eventCardBg, { backgroundColor: meta.grad[1] }]}>
-                {item.imageUrl ? (
-                  <Image source={{ uri: item.imageUrl }} style={styles.eventCardBgImg} />
-                ) : (
-                  <View style={[styles.eventCardNoBg, { backgroundColor: meta.grad[0] }]}>
-                    <Ionicons name={meta.icon as any} size={56} color="rgba(255,255,255,0.55)" />
-                  </View>
-                )}
+                {item.imageUrl
+                  ? <Image source={{ uri: item.imageUrl }} style={styles.eventCardBgImg} />
+                  : <View style={[styles.eventCardNoBg, { backgroundColor: meta.grad[0] }]}>
+                      <Ionicons name={meta.icon as any} size={56} color="rgba(255,255,255,0.55)" />
+                    </View>
+                }
                 <View style={styles.eventCardGradient} />
                 <View style={[styles.eventDatePill, { backgroundColor: meta.grad[0] }]}>
                   <Text style={styles.eventDateDay}>{day}</Text>
@@ -411,9 +775,9 @@ function EventsBar({ navigation, colors, currentUserId }: { navigation: any; col
   );
 }
 
-//main screen
+// main screen
 export default function HomeFeedScreen({ navigation }: any) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { t } = useLang();
   const { userProfile, user, logout } = useAuthStore();
 
@@ -427,17 +791,19 @@ export default function HomeFeedScreen({ navigation }: any) {
   const [followingList, setFollowingList] = useState<string[]>([]);
   const [replyingTo, setReplyingTo] = useState<{ id: string; userName: string } | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
-
-  // Viewer state
   const [viewerItems, setViewerItems] = useState<{ url: string; type: 'image' | 'video' }[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [viewerVisible, setViewerVisible] = useState(false);
+
+  const bgGradient: [string, string, string, string] = isDark
+    ? ['#1A1008', '#2A1C0E', '#3A2814', '#4A341C']
+    : ['#FFC58A', '#FFD9A8', '#FFEAC8', '#FFF6E5'];
 
   useEffect(() => {
     if (!user?.uid) return;
     const unsub = firestore().collection('notifications')
       .where('toUserId', '==', user.uid).where('read', '==', false)
-      .onSnapshot(snap => setUnreadCount(snap.size), () => { });
+      .onSnapshot(snap => setUnreadCount(snap.size), () => {});
     return () => unsub();
   }, [user]);
 
@@ -463,11 +829,17 @@ export default function HomeFeedScreen({ navigation }: any) {
     try {
       const doc = await firestore().collection('users').doc(user.uid).get();
       setFollowingList(doc.data()?.following || []);
-    } catch { }
+    } catch {}
   }, [user]);
 
   useEffect(() => { fetchPosts(); fetchFollowing(); }, []);
-  const onRefresh = async () => { setRefreshing(true); await fetchPosts(); await fetchFollowing(); setRefreshing(false); };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchPosts();
+    await fetchFollowing();
+    setRefreshing(false);
+  };
 
   const incrementViews = async (postId: string, postUserId: string) => {
     if (!user?.uid || postUserId === user.uid) return;
@@ -484,7 +856,7 @@ export default function HomeFeedScreen({ navigation }: any) {
           read: false, createdAt: firestore.FieldValue.serverTimestamp(),
         });
       }
-    } catch { }
+    } catch {}
   };
 
   const openViewer = (post: Post, index: number) => {
@@ -560,7 +932,7 @@ export default function HomeFeedScreen({ navigation }: any) {
     try {
       const snap = await firestore().collection('posts').doc(post.id).collection('comments').orderBy('createdAt', 'asc').get();
       setComments(snap.docs.map(d => ({ id: d.id, ...d.data() } as Comment)));
-    } catch { } finally { setLoadingComments(false); }
+    } catch {} finally { setLoadingComments(false); }
   };
 
   const handleReply = (c: Comment) => { setReplyingTo({ id: c.id, userName: c.userName }); setCommentText(`@${c.userName} `); };
@@ -630,7 +1002,6 @@ export default function HomeFeedScreen({ navigation }: any) {
     const isFollowing = followingList.includes(item.userId);
     const isOwnPost = item.userId === user?.uid;
     const savedCount = item.bookmarks?.length || 0;
-
     const mediaItems = (item.mediaItems && item.mediaItems.length > 0)
       ? item.mediaItems
       : [{ url: item.imageUrl, type: (isVideoUrl(item.imageUrl) ? 'video' : 'image') as 'image' | 'video' }];
@@ -641,9 +1012,7 @@ export default function HomeFeedScreen({ navigation }: any) {
         borderColor: `${colors.saffron}20`,
         shadowColor: colors.saffron,
       }]}>
-        {/* Subtle top accent band */}
         <View style={[styles.cardAccent, { backgroundColor: `${colors.saffron}08` }]} />
-        {/* Header */}
         <TouchableOpacity style={styles.postHeader} activeOpacity={0.85}
           onPress={() => { incrementViews(item.id, item.userId); navigation.navigate('UserProfile', { userId: item.userId }); }}>
           {item.userAvatar
@@ -667,10 +1036,8 @@ export default function HomeFeedScreen({ navigation }: any) {
           )}
         </TouchableOpacity>
 
-        {/*media grid */}
         <MediaGrid items={mediaItems} onPressItem={(idx) => openViewer(item, idx)} />
 
-        {/* actions */}
         <View style={styles.postActions}>
           <View style={styles.postActionsLeft}>
             <TouchableOpacity style={styles.actionBtn} onPress={() => handleLike(item)}>
@@ -678,11 +1045,6 @@ export default function HomeFeedScreen({ navigation }: any) {
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionBtn} onPress={() => openComments(item)}>
               <Ionicons name="chatbubble-outline" size={24} color={colors.darkText} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn} onPress={async () => {
-              try { await Share.share({ title: item.title || 'FolkChat', message: `${item.title || 'Folk art'}\nBy ${item.userName}\n\nShared from FolkChat` }); } catch { }
-            }}>
-              <Ionicons name="paper-plane-outline" size={24} color={colors.darkText} />
             </TouchableOpacity>
           </View>
           <View style={styles.bookmarkRow}>
@@ -701,13 +1063,7 @@ export default function HomeFeedScreen({ navigation }: any) {
 
         {item.title || item.caption || item.techniques ? (
           <View style={styles.detailsWrap}>
-            <PostDetails
-              title={item.title}
-              userName={item.userName || ''}
-              caption={item.caption}
-              techniques={item.techniques}
-              colors={colors}
-            />
+            <PostDetails title={item.title} userName={item.userName || ''} caption={item.caption} techniques={item.techniques} colors={colors} />
           </View>
         ) : null}
 
@@ -731,11 +1087,31 @@ export default function HomeFeedScreen({ navigation }: any) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.warmBg }]}>
-      {/*header */}
-      <View style={[styles.header, { backgroundColor: colors.header, borderBottomColor: colors.border }]}>
-        <Text style={[styles.logo, { color: colors.saffron }]}>Folk<Text style={{ color: colors.darkText }}>Chat</Text></Text>
+    <LinearGradient
+      colors={bgGradient}
+      locations={[0, 0.30, 0.70, 1]}
+      style={styles.container}
+      start={{ x: 0.5, y: 0 }}
+      end={{ x: 0.5, y: 1 }}
+    >
+      {/* ── Header ── */}
+      <View style={[styles.header, {
+        backgroundColor: isDark ? '#1A1008' : '#F5E6CC',
+        borderBottomColor: colors.border,
+      }]}>
+        <Image
+          source={require('../../../assets/images/logotext.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
         <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.notifBtn}
+            onPress={() => navigation.navigate('AddStory')}
+          >
+            <Ionicons name="add-circle-outline" size={26} color={colors.darkText} />
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.notifBtn} onPress={() => navigation.navigate('Notifications')}>
             <Ionicons name="notifications-outline" size={24} color={colors.darkText} />
             {unreadCount > 0 && (
@@ -744,6 +1120,7 @@ export default function HomeFeedScreen({ navigation }: any) {
               </View>
             )}
           </TouchableOpacity>
+
           <TouchableOpacity style={styles.avatarBtn} onPress={() => setShowDropdown(true)}>
             {userProfile?.avatarUrl
               ? <Image source={{ uri: userProfile.avatarUrl }} style={[styles.avatar, { borderColor: colors.saffron }]} />
@@ -762,7 +1139,17 @@ export default function HomeFeedScreen({ navigation }: any) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: 10, paddingBottom: 20 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.saffron]} />}
-        ListHeaderComponent={<EventsBar navigation={navigation} colors={colors} currentUserId={user?.uid} />}
+        ListHeaderComponent={
+          <>
+            <StoriesBar
+              currentUserId={user?.uid}
+              userProfile={userProfile}
+              colors={colors}
+              navigation={navigation}
+            />
+            <EventsBar navigation={navigation} colors={colors} currentUserId={user?.uid} />
+          </>
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="images-outline" size={56} color={colors.muted} />
@@ -772,10 +1159,9 @@ export default function HomeFeedScreen({ navigation }: any) {
         }
       />
 
-      {/*full-screen media viewer */}
       <MediaViewer items={viewerItems} initialIndex={viewerIndex} visible={viewerVisible} onClose={() => setViewerVisible(false)} />
 
-      {/* comments modal */}
+      {/* Comments Modal */}
       <Modal visible={commentPost !== null} animationType="slide" transparent>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <Pressable style={styles.commentOverlay} onPress={() => { setCommentPost(null); setReplyingTo(null); }}>
@@ -849,7 +1235,7 @@ export default function HomeFeedScreen({ navigation }: any) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/*dropdown */}
+      {/* Dropdown */}
       <Modal visible={showDropdown} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setShowDropdown(false)}>
           <View style={[styles.dropdown, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -876,109 +1262,112 @@ export default function HomeFeedScreen({ navigation }: any) {
           </View>
         </Pressable>
       </Modal>
-    </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, borderBottomWidth: 0.5 },
-  logo: { fontSize: 22, fontWeight: 'bold' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  notifBtn: { padding: 4, position: 'relative' },
-  badge: { position: 'absolute', top: -1, right: -1, minWidth: 16, height: 16, borderRadius: 8, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
-  badgeText: { color: '#fff', fontSize: 9, fontWeight: 'bold' },
-  avatarBtn: { padding: 2 },
-  avatar: { width: 36, height: 36, borderRadius: 18, borderWidth: 2 },
-  avatarInit: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-  avatarInitTxt: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
-  eventsSection: { marginBottom: 10, borderBottomWidth: 0.5, paddingTop: 4 },
-  eventsSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12 },
-  eventsHeaderDot: { width: 8, height: 8, borderRadius: 4 },
-  eventsSectionTitle: { fontSize: 15, fontWeight: '800', letterSpacing: 0.3 },
-  seeAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
-  seeAllTxt: { fontSize: 12, fontWeight: '600' },
-  eventCard: { width: 160, height: 200, borderRadius: 18, overflow: 'hidden', elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8 },
-  eventCardBg: { flex: 1, position: 'relative' },
-  eventCardBgImg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%', resizeMode: 'cover' },
-  eventCardNoBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
-  eventCardGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 120, backgroundColor: 'transparent', borderBottomLeftRadius: 18, borderBottomRightRadius: 18 },
-  eventDatePill: { position: 'absolute', top: 12, left: 12, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 5, alignItems: 'center', minWidth: 38 },
-  eventDateDay: { color: '#fff', fontSize: 16, fontWeight: '900', lineHeight: 18 },
-  eventDateMonth: { color: 'rgba(255,255,255,0.85)', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
-  eventTopRight: { position: 'absolute', top: 10, right: 10, gap: 4, alignItems: 'flex-end' },
-  organizerBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 3 },
-  organizerBadgeTxt: { color: '#fff', fontSize: 9, fontWeight: '800' },
-  eventInterestedCheck: { backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 12, padding: 2 },
-  eventCardBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 10, gap: 3, backgroundColor: 'rgba(0,0,0,0.42)', borderBottomLeftRadius: 18, borderBottomRightRadius: 18 },
-  eventCatTag: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, marginBottom: 2 },
-  eventCatTagTxt: { color: '#fff', fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
-  eventCardTitle: { color: '#fff', fontSize: 13, fontWeight: '800', lineHeight: 17 },
-  eventCardLocRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  eventCardLoc: { color: 'rgba(255,255,255,0.85)', fontSize: 10, flex: 1 },
-  eventInterestedRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 },
-  eventInterestedCountTxt: { color: 'rgba(255,255,255,0.85)', fontSize: 10 },
-  postCard: { marginBottom: 12, marginHorizontal: 12, borderRadius: 18, borderWidth: 0.5, overflow: 'hidden', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
-  cardAccent: { position: 'absolute', top: 0, left: 0, right: 0, height: 90 },
-  postHeader: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10 },
-  postAvatar: { width: 42, height: 42, borderRadius: 21 },
-  postAvatarInit: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
-  initTxt: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  postUserName: { fontSize: 14, fontWeight: 'bold' },
-  postUserCat: { fontSize: 12 },
-  followBtn: { borderWidth: 1, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 5 },
-  followBtnTxt: { fontSize: 13, fontWeight: '600' },
-  postActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 },
-  postActionsLeft: { flexDirection: 'row', gap: 18 },
-  actionBtn: { padding: 2 },
-  bookmarkRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  savedCount: { fontSize: 12, fontWeight: '600' },
-  likesCount: { paddingHorizontal: 14, fontSize: 13, fontWeight: 'bold', marginBottom: 4 },
+  container:    { flex: 1 },
+  header:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, borderBottomWidth: 0.5, borderBottomLeftRadius: 20, borderBottomRightRadius: 20, overflow: 'hidden' },
+  logoImage:    { height: 35, width: 90, alignSelf: 'flex-start' },
+  headerRight:  { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  notifBtn:     { padding: 4, position: 'relative' },
+  badge:        { position: 'absolute', top: -1, right: -1, minWidth: 16, height: 16, borderRadius: 8, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
+  badgeText:    { color: '#fff', fontSize: 9, fontWeight: 'bold' },
+  avatarBtn:    { padding: 2 },
+  avatar:       { width: 36, height: 36, borderRadius: 18, borderWidth: 2 },
+  avatarInit:   { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+  avatarInitTxt:{ color: '#fff', fontWeight: 'bold', fontSize: 15 },
 
-  detailsWrap: { paddingHorizontal: 14, paddingTop: 2 },
-  titleRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' },
-  titleUser: { fontSize: 13, fontWeight: 'bold' },
-  titleText: { fontSize: 13, fontWeight: '600' },
-  showMoreBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start', marginTop: 4, paddingVertical: 2 },
-  showMoreTxt: { fontSize: 12, fontWeight: '700' },
+  eventsSection:       { marginBottom: 10, borderBottomWidth: 0.5, paddingTop: 4 },
+  eventsSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12 },
+  eventsHeaderDot:     { width: 8, height: 8, borderRadius: 4 },
+  eventsSectionTitle:  { fontSize: 15, fontWeight: '800', letterSpacing: 0.3 },
+  seeAllBtn:           { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  seeAllTxt:           { fontSize: 12, fontWeight: '600' },
+  eventCard:           { width: 160, height: 200, borderRadius: 18, overflow: 'hidden', elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8 },
+  eventCardBg:         { flex: 1, position: 'relative' },
+  eventCardBgImg:      { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%', resizeMode: 'cover' },
+  eventCardNoBg:       { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
+  eventCardGradient:   { position: 'absolute', bottom: 0, left: 0, right: 0, height: 120, backgroundColor: 'transparent', borderBottomLeftRadius: 18, borderBottomRightRadius: 18 },
+  eventDatePill:       { position: 'absolute', top: 12, left: 12, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 5, alignItems: 'center', minWidth: 38 },
+  eventDateDay:        { color: '#fff', fontSize: 16, fontWeight: '900', lineHeight: 18 },
+  eventDateMonth:      { color: 'rgba(255,255,255,0.85)', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
+  eventTopRight:       { position: 'absolute', top: 10, right: 10, gap: 4, alignItems: 'flex-end' },
+  organizerBadge:      { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 3 },
+  organizerBadgeTxt:   { color: '#fff', fontSize: 9, fontWeight: '800' },
+  eventInterestedCheck:{ backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 12, padding: 2 },
+  eventCardBottom:     { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 10, gap: 3, backgroundColor: 'rgba(0,0,0,0.42)', borderBottomLeftRadius: 18, borderBottomRightRadius: 18 },
+  eventCatTag:         { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, marginBottom: 2 },
+  eventCatTagTxt:      { color: '#fff', fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
+  eventCardTitle:      { color: '#fff', fontSize: 13, fontWeight: '800', lineHeight: 17 },
+  eventCardLocRow:     { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  eventCardLoc:        { color: 'rgba(255,255,255,0.85)', fontSize: 10, flex: 1 },
+  eventInterestedRow:  { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 },
+  eventInterestedCountTxt: { color: 'rgba(255,255,255,0.85)', fontSize: 10 },
+
+  postCard:     { marginBottom: 12, marginHorizontal: 12, borderRadius: 18, borderWidth: 0.5, overflow: 'hidden', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
+  cardAccent:   { position: 'absolute', top: 0, left: 0, right: 0, height: 90 },
+  postHeader:   { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10 },
+  postAvatar:   { width: 42, height: 42, borderRadius: 21 },
+  postAvatarInit:{ width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
+  initTxt:      { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  postUserName: { fontSize: 14, fontWeight: 'bold' },
+  postUserCat:  { fontSize: 12 },
+  followBtn:    { borderWidth: 1, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 5 },
+  followBtnTxt: { fontSize: 13, fontWeight: '600' },
+  postActions:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 },
+  postActionsLeft: { flexDirection: 'row', gap: 18 },
+  actionBtn:    { padding: 2 },
+  bookmarkRow:  { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  savedCount:   { fontSize: 12, fontWeight: '600' },
+  likesCount:   { paddingHorizontal: 14, fontSize: 13, fontWeight: 'bold', marginBottom: 4 },
+  detailsWrap:  { paddingHorizontal: 14, paddingTop: 2 },
+  titleRow:     { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' },
+  titleUser:    { fontSize: 13, fontWeight: 'bold' },
+  titleText:    { fontSize: 13, fontWeight: '600' },
+  showMoreBtn:  { flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start', marginTop: 4, paddingVertical: 2 },
+  showMoreTxt:  { fontSize: 12, fontWeight: '700' },
   expandedWrap: { marginTop: 6, gap: 8 },
-  descTxt: { fontSize: 13, lineHeight: 20 },
-  techRow: { gap: 6 },
-  techBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 },
-  techLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
-  techTxt: { fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
-  categoryTag: { paddingHorizontal: 14, paddingVertical: 4 },
-  categoryTagTxt: { fontSize: 12, fontWeight: '500' },
+  descTxt:      { fontSize: 13, lineHeight: 20 },
+  techRow:      { gap: 6 },
+  techBadge:    { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 },
+  techLabel:    { fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
+  techTxt:      { fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
+  categoryTag:  { paddingHorizontal: 14, paddingVertical: 4 },
+  categoryTagTxt:{ fontSize: 12, fontWeight: '500' },
   viewComments: { paddingHorizontal: 14, fontSize: 13, marginBottom: 2 },
-  postTime: { paddingHorizontal: 14, paddingBottom: 12, fontSize: 11 },
-  emptyState: { alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 12 },
-  emptyTitle: { fontSize: 18, fontWeight: 'bold' },
-  emptyText: { fontSize: 14 },
-  commentOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  commentSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, height: '75%' },
-  commentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 0.5 },
-  commentTitle: { fontSize: 16, fontWeight: 'bold' },
-  commentList: { flex: 1, padding: 16 },
-  loadingText: { textAlign: 'center', marginTop: 20 },
-  noComments: { textAlign: 'center', marginTop: 40, fontSize: 14 },
-  commentItem: { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  commentAvatar: { width: 36, height: 36, borderRadius: 18 },
-  commentAvatarInit: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-  commentContent: { flex: 1 },
-  commentUser: { fontSize: 13, fontWeight: 'bold', marginBottom: 2 },
-  commentText: { fontSize: 13, lineHeight: 18 },
-  replyBtn: { marginTop: 4 },
-  replyBtnTxt: { fontSize: 12, fontWeight: '600' },
-  replyIndicator: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderTopWidth: 0.5 },
-  replyIndicatorTxt: { fontSize: 13 },
-  commentInput: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderTopWidth: 0.5 },
-  commentTextInput: { flex: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, fontSize: 14, maxHeight: 80 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' },
-  dropdown: { position: 'absolute', top: 80, right: 16, borderRadius: 16, width: 220, elevation: 8, borderWidth: 0.5 },
+  postTime:     { paddingHorizontal: 14, paddingBottom: 12, fontSize: 11 },
+  emptyState:   { alignItems: 'center', justifyContent: 'center', paddingTop: 60, gap: 12 },
+  emptyTitle:   { fontSize: 18, fontWeight: 'bold' },
+  emptyText:    { fontSize: 14 },
+
+  commentOverlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  commentSheet:       { borderTopLeftRadius: 24, borderTopRightRadius: 24, height: '75%' },
+  commentHeader:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 0.5 },
+  commentTitle:       { fontSize: 16, fontWeight: 'bold' },
+  commentList:        { flex: 1, padding: 16 },
+  loadingText:        { textAlign: 'center', marginTop: 20 },
+  noComments:         { textAlign: 'center', marginTop: 40, fontSize: 14 },
+  commentItem:        { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  commentAvatar:      { width: 36, height: 36, borderRadius: 18 },
+  commentAvatarInit:  { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+  commentContent:     { flex: 1 },
+  commentUser:        { fontSize: 13, fontWeight: 'bold', marginBottom: 2 },
+  commentText:        { fontSize: 13, lineHeight: 18 },
+  replyBtn:           { marginTop: 4 },
+  replyBtnTxt:        { fontSize: 12, fontWeight: '600' },
+  replyIndicator:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderTopWidth: 0.5 },
+  replyIndicatorTxt:  { fontSize: 13 },
+  commentInput:       { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderTopWidth: 0.5 },
+  commentTextInput:   { flex: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, fontSize: 14, maxHeight: 80 },
+
+  modalOverlay:   { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' },
+  dropdown:       { position: 'absolute', top: 80, right: 16, borderRadius: 16, width: 220, elevation: 8, borderWidth: 0.5 },
   dropdownHeader: { padding: 16, paddingBottom: 12 },
-  dropdownName: { fontSize: 15, fontWeight: 'bold' },
-  dropdownEmail: { fontSize: 12, marginTop: 2 },
-  dropdownDivider: { height: 0.5 },
-  dropdownItem: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, paddingHorizontal: 16 },
-  dropdownLabel: { fontSize: 14, fontWeight: '500' },
+  dropdownName:   { fontSize: 15, fontWeight: 'bold' },
+  dropdownEmail:  { fontSize: 12, marginTop: 2 },
+  dropdownDivider:{ height: 0.5 },
+  dropdownItem:   { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, paddingHorizontal: 16 },
+  dropdownLabel:  { fontSize: 14, fontWeight: '500' },
 });

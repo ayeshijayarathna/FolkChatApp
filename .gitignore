@@ -81,3 +81,7 @@ GoogleService-Info.plist
 
 # Sensitive service files
 src/config/keys.ts
+
+# bundle assets
+android/app/src/main/assets/index.android.bundle
+android/app/src/main/assets/index.android.bundle.map
