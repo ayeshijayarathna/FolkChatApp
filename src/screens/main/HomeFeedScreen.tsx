@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Modal, Pressable, Image, FlatList,
@@ -54,7 +54,7 @@ const isVideoUrl = (url: string) =>
 
 function initials(name: string) { return (name || 'A').charAt(0).toUpperCase(); }
 
-//story viewer model
+// story viewer
 function StoryViewer({
   stories, initialIndex, visible, onClose, currentUserId, colors, onDeleteStory,
 }: {
@@ -205,11 +205,10 @@ function StoryViewer({
         }
 
         {currentStory.caption ? (() => {
-          const sw = width;           
-          const sh = SH;              
+          const sw = width;
+          const sh = SH;
           const xFrac = currentStory.captionXFrac ?? 0.5;
           const yFrac = currentStory.captionYFrac ?? 0.45;
-          // Turn fractions back into whole pixels
           const left = xFrac * sw;
           const top  = yFrac * sh;
           return (
@@ -250,7 +249,7 @@ const sv = StyleSheet.create({
   captionTxt:   { fontSize: 18, fontWeight: '800', textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 },
 });
 
-//story bar
+// stories bar
 function StoriesBar({
   currentUserId, userProfile, colors, navigation,
 }: {
@@ -527,7 +526,7 @@ const vw = StyleSheet.create({
   playBtn:     { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
 });
 
-//meadia grid
+// meadia grid
 function MediaGrid({ items, onPressItem }: {
   items: { url: string; type: 'image' | 'video' }[];
   onPressItem: (index: number) => void;
@@ -621,7 +620,7 @@ const gs = StyleSheet.create({
   overlayMoreTxt: { color: '#fff', fontSize: 28, fontWeight: '800' },
 });
 
-//post details
+// post details
 function PostDetails({ title, userName, caption, techniques, colors }: {
   title: string; userName: string; caption: string; techniques?: string; colors: any;
 }) {
@@ -663,7 +662,7 @@ function PostDetails({ title, userName, caption, techniques, colors }: {
   );
 }
 
-//events bar
+// events bar
 const CATEGORY_META: Record<string, { icon: string; grad: [string, string] }> = {
   'Exhibition':  { icon: 'color-palette-outline', grad: ['#D4651A', '#8B3A1A'] },
   'Workshop':    { icon: 'construct-outline',     grad: ['#1A6B5C', '#2D5016'] },
@@ -675,102 +674,71 @@ const CATEGORY_META: Record<string, { icon: string; grad: [string, string] }> = 
   'default':     { icon: 'calendar-outline',      grad: ['#D4651A', '#8B3A1A'] },
 };
 
-function EventsBar({ navigation, colors, currentUserId }: { navigation: any; colors: any; currentUserId?: string }) {
+function EventsBar({ navigation, colors, currentUserId }: {
+  navigation: any; colors: any; currentUserId?: string;
+}) {
   const [events, setEvents] = useState<Event[]>([]);
-  useEffect(() => {
-    firestore().collection('events').orderBy('date', 'asc').limit(15).get()
-      .then(snap => {
-        const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as Event));
-        Promise.all(list.map(async e => {
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchEvents();
+    }, [])
+  );
+
+  const fetchEvents = async () => {
+    try {
+      const now = new Date();
+      const snap = await firestore()
+        .collection('events')
+        .where('date', '>=', now)
+        .orderBy('date', 'asc')
+        .limit(15)
+        .get();
+
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as Event));
+      const enriched = await Promise.all(
+        list.map(async (e) => {
           try {
             const u = await firestore().collection('users').doc(e.userId).get();
-            return { ...e, userName: u.data()?.name || 'Artist', userAvatar: u.data()?.avatarUrl || '' };
-          } catch { return e; }
-        })).then(setEvents);
-      }).catch(() => {});
-  }, []);
-  if (events.length === 0) return null;
-  const parseDate = (ts: any) => {
-    if (!ts) return { day: '', month: '' };
-    const d = ts.toDate ? ts.toDate() : new Date(ts);
-    return {
-      day: d.toLocaleDateString('en-US', { day: 'numeric' }),
-      month: d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
-    };
+            const ud = u.data();
+            return {
+              ...e,
+              userName: ud?.name || 'Artist',
+              userAvatar: ud?.avatarUrl || '',
+            };
+          } catch {
+            return { ...e, userName: 'Artist', userAvatar: '' };
+          }
+        })
+      );
+
+      setEvents(enriched);
+    } catch (e) {
+      console.log('Events fetch error:', e);
+    }
   };
+
+
   return (
     <View style={[styles.eventsSection, { borderBottomColor: colors.border }]}>
       <View style={styles.eventsSectionHeader}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <View style={[styles.eventsHeaderDot, { backgroundColor: colors.saffron }]} />
           <Text style={[styles.eventsSectionTitle, { color: colors.darkText }]}>Upcoming Events</Text>
+          {events.length > 0 && (
+            <View style={[styles.eventsCountBadge, { backgroundColor: `${colors.saffron}20` }]}>
+              <Text style={[styles.eventsCountTxt, { color: colors.saffron }]}>{events.length}</Text>
+            </View>
+          )}
         </View>
-        <TouchableOpacity style={[styles.seeAllBtn, { borderColor: colors.saffron }]}
-          onPress={() => navigation.navigate('EventDetail', { showAll: true })}>
+        <TouchableOpacity
+          style={[styles.seeAllBtn, { borderColor: colors.saffron }]}
+          onPress={() => navigation.navigate('EventDetail', { showAll: true })}
+        >
           <Text style={[styles.seeAllTxt, { color: colors.saffron }]}>See all</Text>
           <Ionicons name="arrow-forward" size={12} color={colors.saffron} />
         </TouchableOpacity>
       </View>
-      <FlatList
-        data={events} horizontal showsHorizontalScrollIndicator={false}
-        keyExtractor={e => e.id}
-        contentContainerStyle={{ paddingHorizontal: 14, gap: 12, paddingBottom: 16 }}
-        renderItem={({ item }) => {
-          const meta = CATEGORY_META[item.category] || CATEGORY_META['default'];
-          const isOrganizer = item.userId === currentUserId;
-          const interestedCount = (item.interestedUsers || []).length;
-          const iAmInterested = (item.interestedUsers || []).includes(currentUserId || '');
-          const { day, month } = parseDate(item.date);
-          return (
-            <TouchableOpacity style={styles.eventCard}
-              onPress={() => navigation.navigate('EventDetail', { event: item })} activeOpacity={0.88}>
-              <View style={[styles.eventCardBg, { backgroundColor: meta.grad[1] }]}>
-                {item.imageUrl
-                  ? <Image source={{ uri: item.imageUrl }} style={styles.eventCardBgImg} />
-                  : <View style={[styles.eventCardNoBg, { backgroundColor: meta.grad[0] }]}>
-                      <Ionicons name={meta.icon as any} size={56} color="rgba(255,255,255,0.55)" />
-                    </View>
-                }
-                <View style={styles.eventCardGradient} />
-                <View style={[styles.eventDatePill, { backgroundColor: meta.grad[0] }]}>
-                  <Text style={styles.eventDateDay}>{day}</Text>
-                  <Text style={styles.eventDateMonth}>{month}</Text>
-                </View>
-                <View style={styles.eventTopRight}>
-                  {isOrganizer && (
-                    <View style={[styles.organizerBadge, { backgroundColor: meta.grad[0] }]}>
-                      <Ionicons name="star" size={9} color="#fff" />
-                      <Text style={styles.organizerBadgeTxt}>My Event</Text>
-                    </View>
-                  )}
-                  {iAmInterested && !isOrganizer && (
-                    <View style={styles.eventInterestedCheck}>
-                      <Ionicons name="checkmark-circle" size={18} color="#fff" />
-                    </View>
-                  )}
-                </View>
-                <View style={styles.eventCardBottom}>
-                  <View style={styles.eventCatTag}>
-                    <Ionicons name={meta.icon as any} size={10} color="#fff" />
-                    <Text style={styles.eventCatTagTxt}>{item.category}</Text>
-                  </View>
-                  <Text style={styles.eventCardTitle} numberOfLines={2}>{item.title}</Text>
-                  <View style={styles.eventCardLocRow}>
-                    <Ionicons name="location-outline" size={11} color="rgba(255,255,255,0.9)" />
-                    <Text style={styles.eventCardLoc} numberOfLines={1}>{item.location || 'TBA'}</Text>
-                  </View>
-                  {(isOrganizer || interestedCount > 0) && (
-                    <View style={styles.eventInterestedRow}>
-                      <Ionicons name="star-outline" size={11} color="rgba(255,255,255,0.9)" />
-                      <Text style={styles.eventInterestedCountTxt}>{interestedCount} interested</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </TouchableOpacity>
-          );
-        }}
-      />
     </View>
   );
 }
@@ -815,7 +783,12 @@ export default function HomeFeedScreen({ navigation }: any) {
         try {
           const u = await firestore().collection('users').doc(data.userId).get();
           const ud = u.data();
-          return { id: doc.id, ...data, userName: ud?.name || 'Unknown Artist', userAvatar: ud?.avatarUrl || '', userCategory: ud?.artistCategory || 'Folk Artist' } as Post;
+          return {
+            id: doc.id, ...data,
+            userName: ud?.name || 'Unknown Artist',
+            userAvatar: ud?.avatarUrl || '',
+            userCategory: ud?.artistCategory || 'Folk Artist',
+          } as Post;
         } catch {
           return { id: doc.id, ...data, userName: 'Unknown Artist', userAvatar: '', userCategory: 'Folk Artist' } as Post;
         }
@@ -1013,8 +986,11 @@ export default function HomeFeedScreen({ navigation }: any) {
         shadowColor: colors.saffron,
       }]}>
         <View style={[styles.cardAccent, { backgroundColor: `${colors.saffron}08` }]} />
-        <TouchableOpacity style={styles.postHeader} activeOpacity={0.85}
-          onPress={() => { incrementViews(item.id, item.userId); navigation.navigate('UserProfile', { userId: item.userId }); }}>
+        <TouchableOpacity
+          style={styles.postHeader}
+          activeOpacity={0.85}
+          onPress={() => { incrementViews(item.id, item.userId); navigation.navigate('UserProfile', { userId: item.userId }); }}
+        >
           {item.userAvatar
             ? <Image source={{ uri: item.userAvatar }} style={styles.postAvatar} />
             : <View style={[styles.postAvatarInit, { backgroundColor: colors.saffron }]}>
@@ -1028,7 +1004,8 @@ export default function HomeFeedScreen({ navigation }: any) {
           {!isOwnPost && (
             <TouchableOpacity
               style={[styles.followBtn, { borderColor: colors.saffron }, isFollowing && { backgroundColor: colors.warmBg, borderColor: colors.border }]}
-              onPress={e => { (e as any).stopPropagation?.(); handleFollow(item.userId); }}>
+              onPress={e => { (e as any).stopPropagation?.(); handleFollow(item.userId); }}
+            >
               <Text style={[styles.followBtnTxt, { color: isFollowing ? colors.muted : colors.saffron }]}>
                 {isFollowing ? t.following_btn : t.follow}
               </Text>
@@ -1085,6 +1062,17 @@ export default function HomeFeedScreen({ navigation }: any) {
       </View>
     );
   };
+  const ListHeader = useMemo(() => (
+    <>
+      <StoriesBar
+        currentUserId={user?.uid}
+        userProfile={userProfile}
+        colors={colors}
+        navigation={navigation}
+      />
+      <EventsBar navigation={navigation} colors={colors} currentUserId={user?.uid} />
+    </>
+  ), [user?.uid, colors]);
 
   return (
     <LinearGradient
@@ -1094,7 +1082,7 @@ export default function HomeFeedScreen({ navigation }: any) {
       start={{ x: 0.5, y: 0 }}
       end={{ x: 0.5, y: 1 }}
     >
-      {/* ── Header ── */}
+      {/* Header */}
       <View style={[styles.header, {
         backgroundColor: isDark ? '#1A1008' : '#F5E6CC',
         borderBottomColor: colors.border,
@@ -1105,10 +1093,7 @@ export default function HomeFeedScreen({ navigation }: any) {
           resizeMode="contain"
         />
         <View style={styles.headerRight}>
-          <TouchableOpacity
-            style={styles.notifBtn}
-            onPress={() => navigation.navigate('AddStory')}
-          >
+          <TouchableOpacity style={styles.notifBtn} onPress={() => navigation.navigate('AddStory')}>
             <Ionicons name="add-circle-outline" size={26} color={colors.darkText} />
           </TouchableOpacity>
 
@@ -1139,17 +1124,7 @@ export default function HomeFeedScreen({ navigation }: any) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: 10, paddingBottom: 20 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.saffron]} />}
-        ListHeaderComponent={
-          <>
-            <StoriesBar
-              currentUserId={user?.uid}
-              userProfile={userProfile}
-              colors={colors}
-              navigation={navigation}
-            />
-            <EventsBar navigation={navigation} colors={colors} currentUserId={user?.uid} />
-          </>
-        }
+        ListHeaderComponent={ListHeader}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="images-outline" size={56} color={colors.muted} />
@@ -1159,7 +1134,12 @@ export default function HomeFeedScreen({ navigation }: any) {
         }
       />
 
-      <MediaViewer items={viewerItems} initialIndex={viewerIndex} visible={viewerVisible} onClose={() => setViewerVisible(false)} />
+      <MediaViewer
+        items={viewerItems}
+        initialIndex={viewerIndex}
+        visible={viewerVisible}
+        onClose={() => setViewerVisible(false)}
+      />
 
       {/* Comments Modal */}
       <Modal visible={commentPost !== null} animationType="slide" transparent>
@@ -1223,8 +1203,10 @@ export default function HomeFeedScreen({ navigation }: any) {
                   style={[styles.commentTextInput, { backgroundColor: colors.offwhite, color: colors.darkText }]}
                   placeholder={replyingTo ? `Reply to @${replyingTo.userName}...` : t.addComment}
                   placeholderTextColor={colors.muted}
-                  value={commentText} onChangeText={setCommentText}
-                  multiline autoFocus={!!replyingTo}
+                  value={commentText}
+                  onChangeText={setCommentText}
+                  multiline
+                  autoFocus={!!replyingTo}
                 />
                 <TouchableOpacity onPress={sendComment} disabled={!commentText.trim()}>
                   <Ionicons name="send" size={22} color={commentText.trim() ? colors.saffron : colors.muted} />
@@ -1280,31 +1262,13 @@ const styles = StyleSheet.create({
   avatarInitTxt:{ color: '#fff', fontWeight: 'bold', fontSize: 15 },
 
   eventsSection:       { marginBottom: 10, borderBottomWidth: 0.5, paddingTop: 4 },
-  eventsSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12 },
+  eventsSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14 },
   eventsHeaderDot:     { width: 8, height: 8, borderRadius: 4 },
   eventsSectionTitle:  { fontSize: 15, fontWeight: '800', letterSpacing: 0.3 },
+  eventsCountBadge:    { borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, justifyContent: 'center', alignItems: 'center' },
+  eventsCountTxt:      { fontSize: 11, fontWeight: '700' },
   seeAllBtn:           { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
   seeAllTxt:           { fontSize: 12, fontWeight: '600' },
-  eventCard:           { width: 160, height: 200, borderRadius: 18, overflow: 'hidden', elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8 },
-  eventCardBg:         { flex: 1, position: 'relative' },
-  eventCardBgImg:      { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%', resizeMode: 'cover' },
-  eventCardNoBg:       { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
-  eventCardGradient:   { position: 'absolute', bottom: 0, left: 0, right: 0, height: 120, backgroundColor: 'transparent', borderBottomLeftRadius: 18, borderBottomRightRadius: 18 },
-  eventDatePill:       { position: 'absolute', top: 12, left: 12, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 5, alignItems: 'center', minWidth: 38 },
-  eventDateDay:        { color: '#fff', fontSize: 16, fontWeight: '900', lineHeight: 18 },
-  eventDateMonth:      { color: 'rgba(255,255,255,0.85)', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
-  eventTopRight:       { position: 'absolute', top: 10, right: 10, gap: 4, alignItems: 'flex-end' },
-  organizerBadge:      { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 3 },
-  organizerBadgeTxt:   { color: '#fff', fontSize: 9, fontWeight: '800' },
-  eventInterestedCheck:{ backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 12, padding: 2 },
-  eventCardBottom:     { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 10, gap: 3, backgroundColor: 'rgba(0,0,0,0.42)', borderBottomLeftRadius: 18, borderBottomRightRadius: 18 },
-  eventCatTag:         { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, marginBottom: 2 },
-  eventCatTagTxt:      { color: '#fff', fontSize: 9, fontWeight: '700', letterSpacing: 0.5 },
-  eventCardTitle:      { color: '#fff', fontSize: 13, fontWeight: '800', lineHeight: 17 },
-  eventCardLocRow:     { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  eventCardLoc:        { color: 'rgba(255,255,255,0.85)', fontSize: 10, flex: 1 },
-  eventInterestedRow:  { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 },
-  eventInterestedCountTxt: { color: 'rgba(255,255,255,0.85)', fontSize: 10 },
 
   postCard:     { marginBottom: 12, marginHorizontal: 12, borderRadius: 18, borderWidth: 0.5, overflow: 'hidden', elevation: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 },
   cardAccent:   { position: 'absolute', top: 0, left: 0, right: 0, height: 90 },

@@ -101,7 +101,7 @@ function SocialLinkButton({ platform, url, colors }: {
       icon: 'logo-facebook' as const,
       color: '#1877F2',
       bg: '#1877F210',
-      label: 'Facebook',
+      label: 'Facebook ',
     },
     instagram: {
       icon: 'logo-instagram' as const,
