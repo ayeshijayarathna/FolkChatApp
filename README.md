@@ -1,120 +1,229 @@
-# FolkChat 🎨
+# 🎭 FolkChat — Sri Lankan Folk Artists Social Platform
 
-A social media platform dedicated to Sri Lankan Folk Artists — built with React Native + Firebase.
+## 🌟 Overview
+**FolkChat** is a social networking platform designed specifically for **Sri Lankan folk artists**.  
+It enables artists to **showcase their artwork, build an audience, connect with others, and promote cultural events** in a modern digital space.
 
-![Platform](https://img.shields.io/badge/Platform-Android-green)
-![React Native](https://img.shields.io/badge/React_Native-0.84.1-blue)
-![Firebase](https://img.shields.io/badge/Firebase-Firestore-orange)
-
----
-
-## 📱 Features
-
-- **Home Feed** — Instagram-style post feed with likes, comments, bookmarks & share
-- **Upload Artwork** — Upload images & videos (up to 10 files per post) via Cloudinary
-- **User Profiles** — Cover photo, avatar, bio, follower/following stats
-- **Edit Profile** — Update name, bio, artist category, profile & cover photos
-- **Authentication** — Email/Password login + Google Sign In
-- **Folk Art Categories** — 28+ traditional Sri Lankan art categories
-- **Follow System** — Follow/unfollow artists
-- **Comments** — Real-time comment system
-- **Save Posts** — Bookmark posts, view saved posts in profile
-- **Search** — Discover artists and artwork
-- **Settings** — Account management, preferences
+The platform combines **social networking, cultural preservation, and AI-powered insights**.
 
 ---
 
-## 🛠 Tech Stack
+## 🚀 Tech Stack
 
 | Category | Technology |
-|----------|-----------|
+|--------|-----------|
 | Framework | React Native 0.84.1 |
 | Language | TypeScript |
-| Auth | Firebase Authentication |
+| Authentication | Firebase Authentication |
 | Database | Cloud Firestore |
 | Media Storage | Cloudinary |
 | State Management | Zustand |
 | Navigation | React Navigation v7 |
-| Icons | React Native Vector Icons (Ionicons) |
-| Video | React Native Video |
-| Image Picker | React Native Image Picker |
+| AI Integration | Groq (Mixtral) |
+| Video/Call | Agora |
+| Local Storage | AsyncStorage |
 
 ---
 
-## 🚀 Getting Started
+## 🔐 Authentication Flow
 
-### Prerequisites
+Splash Screen → Onboarding → Login / Sign Up / Forgot Password  
 
-- Node.js >= 18
-- Android Studio + Android SDK
-- JDK 17
-- React Native CLI
-
-### Installation
-
-**1. Clone the repository**
-```bash
-git clone 
-cd FolkChatApp
-```
-
-**2. Install dependencies**
-```bash
-npm install
-```
-
-**3. Configure Firebase**
-
-- Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com)
-- Enable **Authentication** (Email/Password + Google)
-- Enable **Cloud Firestore**
-- Add Android app with package name `com.folkchat`
-- Download `google-services.json` and place it in `android/app/`
-
-**4. Configure Cloudinary**
-
-- Create account at [cloudinary.com](https://cloudinary.com)
-- Create an **unsigned upload preset**
-- Copy `src/services/cloudinary.service.example.ts` to `src/services/cloudinary.service.ts`
-- Fill in your `CLOUD_NAME` and `UPLOAD_PRESET`
-
-**5. Configure Google Sign In**
-
-- Copy `src/services/firebase.example.ts` to `src/services/firebase.ts`
-- Fill in your **Web Client ID** from Firebase Console → Authentication → Google → Web SDK configuration
-
-**6. Run the app**
-```bash
-npx react-native run-android
-```
-
----
-## ⚠️ Important Notes
-
-- `google-services.json` is **git-ignored** — never commit this file
-- `src/services/firebase.ts` is **git-ignored** — contains Web Client ID
-- `src/services/cloudinary.service.ts` is **git-ignored** — contains API credentials
-- Use the `.example.ts` template files to set up your own credentials
+### Features
+- Email & Password Authentication  
+- Google Sign-In  
+- Artist category selection  
+- Password reset via email  
 
 ---
 
-## 🎨 Color Palette
+## 📱 Main Features
 
-| Name | Hex |
-|------|-----|
-| Saffron | `#D4651A` |
-| Clay | `#C4834A` |
-| Rust | `#8B3A1A` |
-| Ivory | `#F5EFE6` |
-| Forest | `#2D5016` |
-| Teal | `#1A6B5C` |
-| Gold | `#B8860B` |
-| Earth | `#5C3D2E` |
+### 🏠 Home Feed
+- Events bar (horizontal scroll)  
+- Notification bell with unread badge  
+- Posts feed:
+  - Multi-image swiper  
+  - Like, Comment, Bookmark  
+  - Caption with "Read More"  
+  - View count tracking  
+  - Author info display  
 
 ---
 
-## 📄 License
+### 🔍 Search
+- Posts grid (3-column layout)  
+- Artist search & suggestions  
+- Follow / Unfollow  
+- Post detail modal  
 
-MIT License — feel free to use this project for learning purposes.
+---
 
-> *Connecting Artists · Celebrating Culture*
+### ➕ Upload
+- Create Posts:
+  - Multiple images  
+  - Title, Caption, Category, Techniques  
+
+- Create Events:
+  - Title, Description, Location, Date  
+
+---
+
+### 💬 Messages (Real-Time Chat)
+
+#### Features
+- Real-time messaging (Firestore)  
+- Typing indicator  
+- Online / Last Seen status  
+- Read receipts (double tick)  
+
+#### Media Support
+- Image sharing (Camera / Gallery)  
+- Full-screen image viewer  
+
+#### Message Actions
+- Edit messages  
+- Delete (for me / for everyone)  
+- Clear chat  
+
+#### UI Features
+- Swipe to delete conversation  
+- Unread badges  
+- Custom chat themes & wallpapers  
+
+---
+
+### 👤 Profile
+- Avatar + Cover image  
+- Bio + Artist category  
+- Stats (Posts / Followers / Following)  
+- Posts grid  
+
+#### Actions
+- Edit/Delete posts  
+- Follow / Message users  
+
+---
+
+## 🎉 Events System
+
+- Events displayed in Home feed  
+
+### Event Details
+- Image, Title, Description  
+- Location & Date  
+
+### Interactions
+- Mark as Interested  
+- Notify organizer  
+- View interested users  
+- Delete own events  
+
+---
+
+## 🔔 Notifications
+
+- Likes, Comments, Follows  
+- Event interest  
+- Messages  
+
+### Smart Navigation
+- Opens relevant screen on tap  
+
+---
+
+## 📊 Analytics (Pro Feature)
+
+### Metrics
+- Likes, Views, Comments, Saves  
+- Average per post  
+
+### Engagement Rate
+(Likes + Comments + Saves) ÷ Total Views × 100  
+
+- Excellent: > 6%  
+- Good: 3% – 6%  
+- Average: 1% – 3%  
+- Growing: < 1%  
+
+---
+
+## 🤖 AI Growth Tips
+
+- Personalized suggestions using Groq AI  
+- Based on user activity and stats  
+- Multiple content strategy angles  
+
+---
+
+## 🎨 Theme & Customization
+
+- Light & Dark Mode  
+- Cultural color palette  
+- Chat themes & wallpapers  
+
+---
+
+## 🌍 Multi-language Support
+
+- English  
+- Sinhala (සිංහල)  
+- Tamil (தமிழ்)  
+
+---
+
+## ⚙️ Settings
+
+- Theme toggle  
+- Language selection  
+- Chat customization  
+- Notifications control  
+- Account management  
+
+---
+
+## 🏗️ Backend Architecture
+
+### Firestore Collections
+
+/users/{uid}  
+/posts/{postId}  
+/comments/{cmtId}  
+/events/{eventId}  
+/chats/{chatId}  
+/messages/{msgId}  
+/notifications/{id}  
+/presence/{uid}  
+
+---
+
+## 📦 Storage
+
+- Cloudinary → media files  
+- AsyncStorage → local preferences  
+
+---
+
+## 🔒 Security
+
+- Firebase Authentication required  
+- Firestore access rules enforced  
+- Owner-based permissions  
+
+---
+
+## 🇱🇰 Unique Sri Lankan Features
+
+- Folk art categories  
+- Cultural AI suggestions  
+- Native language support  
+- Traditional-inspired UI colors  
+
+---
+
+## 📞 Real-Time Communication
+
+- Real-time chat using Firestore  
+- Image & document messaging  
+- Typing indicators & presence tracking  
+- Voice & Video Calls via Agora  
